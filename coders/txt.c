@@ -446,6 +446,8 @@ static Image *ReadTXTImage(const ImageInfo *image_info,ExceptionInfo *exception)
       ThrowReaderException(CorruptImageError,"ImproperImageHeader");
     image->columns=width;
     image->rows=height;
+    if ((max_value == 0) || (max_value > 4294967295UL))
+      ThrowReaderException(CorruptImageError,"ImproperImageHeader");
     for (depth=1; (GetQuantumRange(depth)+1) < max_value; depth++) ;
     image->depth=depth;
     status=SetImageExtent(image,image->columns,image->rows,exception);
@@ -563,6 +565,12 @@ static Image *ReadTXTImage(const ImageInfo *image_info,ExceptionInfo *exception)
           break;
       }
     }
+    if (EOFBlob(image) != MagickFalse)
+      {
+        ThrowFileException(exception,CorruptImageError,"UnexpectedEndOfFile",
+          image->filename);
+        break;
+      }
     (void) ReadBlobString(image,text);
     if (LocaleNCompare((char *) text,MagickID,strlen(MagickID)) == 0)
       {

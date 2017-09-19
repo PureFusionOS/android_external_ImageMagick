@@ -2234,7 +2234,7 @@ static void ImportGrayQuantum(const Image *image,QuantumInfo *quantum_info,
           for (x=0; x < (ssize_t) number_pixels; x++)
           {
             p=PushShortPixel(quantum_info->endian,p,&pixel);
-            SetPixelGray(image,ScaleShortToQuantum(pixel),q);
+            SetPixelGray(image,QuantumRange-ScaleShortToQuantum(pixel),q);
             p+=quantum_info->pad;
             q+=GetPixelChannels(image);
           }
@@ -4280,7 +4280,7 @@ MagickExport size_t ImportQuantumPixels(const Image *image,
         register ssize_t
           i;
 
-        if (GetPixelWriteMask(image,q) == 0)
+        if (GetPixelWriteMask(image,q) <= (QuantumRange/2))
           {
             q+=GetPixelChannels(image);
             continue;
@@ -4289,8 +4289,8 @@ MagickExport size_t ImportQuantumPixels(const Image *image,
         gamma=PerceptibleReciprocal(Sa);
         for (i=0; i < (ssize_t) GetPixelChannels(image); i++)
         {
-          PixelChannel channel=GetPixelChannelChannel(image,i);
-          PixelTrait traits=GetPixelChannelTraits(image,channel);
+          PixelChannel channel = GetPixelChannelChannel(image,i);
+          PixelTrait traits = GetPixelChannelTraits(image,channel);
           if ((channel == AlphaPixelChannel) ||
               ((traits & UpdatePixelTrait) == 0))
             continue;

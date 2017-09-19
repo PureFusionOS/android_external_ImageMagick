@@ -28,17 +28,18 @@ typedef enum
 {
   ReadMode,
   WriteMode,
-  IOMode
+  IOMode,
+  PersistMode
 } MapMode;
 
 typedef ssize_t
-  (*CustomStreamHandler)(const unsigned char *,const size_t,const void *);
-
-typedef size_t
-  (*CustomStreamSeeker)(const MagickOffsetType,const int,const void *);
+  (*CustomStreamHandler)(unsigned char *,const size_t,void *);
 
 typedef MagickOffsetType
-  (*CustomStreamTeller)(const void *);
+  (*CustomStreamSeeker)(const MagickOffsetType,const int,void *);
+
+typedef MagickOffsetType
+  (*CustomStreamTeller)(void *);
 
 typedef struct _CustomStreamInfo
   CustomStreamInfo;

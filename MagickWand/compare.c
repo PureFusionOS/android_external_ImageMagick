@@ -1151,14 +1151,8 @@ WandExport MagickBooleanType CompareImagesCommand(ImageInfo *image_info,
       exception);
   else
     if (similarity_image == (Image *) NULL)
-      {
-        if (metric == PerceptualHashErrorMetric)
-          difference_image=CompareImages(image,reconstruct_image,metric,
-            &distortion,exception);
-        else
-          ThrowCompareException(OptionError,"ImageWidthsOrHeightsDiffer",
-            image->filename);
-      }
+      difference_image=CompareImages(image,reconstruct_image,metric,&distortion,
+        exception);
     else
       {
         Image
@@ -1239,6 +1233,8 @@ WandExport MagickBooleanType CompareImagesCommand(ImageInfo *image_info,
             case NormalizedCrossCorrelationErrorMetric:
             case PeakSignalToNoiseRatioErrorMetric:
             case PerceptualHashErrorMetric:
+            case StructuralSimilarityErrorMetric:
+            case StructuralDissimilarityErrorMetric:
             {
               (void) FormatLocaleFile(stderr,"%g",distortion);
               break;
@@ -1340,6 +1336,8 @@ WandExport MagickBooleanType CompareImagesCommand(ImageInfo *image_info,
             case NormalizedCrossCorrelationErrorMetric:
             case PeakSignalToNoiseRatioErrorMetric:
             case PerceptualHashErrorMetric:
+            case StructuralSimilarityErrorMetric:
+            case StructuralDissimilarityErrorMetric:
             {
               switch (image->colorspace)
               {

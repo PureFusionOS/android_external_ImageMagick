@@ -869,7 +869,7 @@ MagickExport void RelinquishMagickResource(const ResourceType type,
   (void) FormatMagickSize(size,MagickFalse,"B",MagickFormatExtent,
     resource_request);
   if (resource_semaphore == (SemaphoreInfo *) NULL)
-		ActivateSemaphoreInfo(&resource_semaphore);
+    ActivateSemaphoreInfo(&resource_semaphore);
   LockSemaphoreInfo(resource_semaphore);
   switch (type)
   {
@@ -1007,7 +1007,7 @@ MagickExport MagickBooleanType RelinquishUniqueFileResource(const char *path)
     ActivateSemaphoreInfo(&resource_semaphore);
   LockSemaphoreInfo(resource_semaphore);
   if (temporary_resources != (SplayTreeInfo *) NULL)
-    status=DeleteNodeFromSplayTree(temporary_resources, (const void *) path);
+    status=DeleteNodeFromSplayTree(temporary_resources,(const void *) path);
   UnlockSemaphoreInfo(resource_semaphore);
   (void) CopyMagickString(cache_path,path,MagickPathExtent);
   AppendImageFormat("cache",cache_path);

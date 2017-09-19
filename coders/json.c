@@ -321,15 +321,15 @@ static ChannelStatistics *GetLocationStatistics(const Image *image,
       register ssize_t
         i;
 
-      if (GetPixelReadMask(image,p) == 0)
+      if (GetPixelReadMask(image,p) <= (QuantumRange/2))
         {
           p+=GetPixelChannels(image);
           continue;
         }
       for (i=0; i < (ssize_t) GetPixelChannels(image); i++)
       {
-        PixelChannel channel=GetPixelChannelChannel(image,i);
-        PixelTrait traits=GetPixelChannelTraits(image,channel);
+        PixelChannel channel = GetPixelChannelChannel(image,i);
+        PixelTrait traits = GetPixelChannelTraits(image,channel);
         if (traits == UndefinedPixelTrait)
           continue;
         switch (type)
@@ -541,7 +541,7 @@ static ssize_t PrintChannelLocations(FILE *file,const Image *image,
       MagickBooleanType
         match;
 
-      PixelTrait traits=GetPixelChannelTraits(image,channel);
+      PixelTrait traits = GetPixelChannelTraits(image,channel);
       if (traits == UndefinedPixelTrait)
         continue;
       offset=GetPixelChannelOffset(image,channel);
@@ -631,8 +631,8 @@ static ssize_t PrintChannelPerceptualHash(Image *image,FILE *file,
     register ssize_t
       j;
 
-    PixelChannel channel=GetPixelChannelChannel(image,i);
-    PixelTrait traits=GetPixelChannelTraits(image,channel);
+    PixelChannel channel = GetPixelChannelChannel(image,i);
+    PixelTrait traits = GetPixelChannelTraits(image,channel);
     if (traits == UndefinedPixelTrait)
       continue;
     n=FormatLocaleFile(file,"      \"Channel%.20g\": {\n",(double) channel);
@@ -1464,7 +1464,7 @@ static MagickBooleanType EncodeImageAttributes(Image *image,FILE *file,
                 case 219: tag="Custom Field 20"; break;
                 default: tag="unknown"; break;
               }
-              (void) FormatLocaleFile(file,"      %s[%.20g,%.20g]: ",tag,
+              (void) FormatLocaleFile(file,"      \"%s[%.20g,%.20g]\": ",tag,
                 (double) dataset,(double) record);
               length=(size_t) (GetStringInfoDatum(profile)[i++] << 8);
               length|=GetStringInfoDatum(profile)[i++];

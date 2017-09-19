@@ -134,6 +134,8 @@ static int MagickDLLCall PostscriptDelegateMessage(void *handle,
       *messages=(char *) ResizeQuantumMemory(*messages,offset+length+1,
         sizeof(char *));
     }
+  if (*messages == (char *) NULL)
+    return(0);
   (void) memcpy(*messages+offset,message,length);
   (*messages)[length+offset] ='\0';
   return(length);
@@ -629,13 +631,18 @@ static Image *ReadPSImage(const ImageInfo *image_info,ExceptionInfo *exception)
         /*
           Read ICC profile.
         */
-        profile=AcquireStringInfo(65536);
+        profile=AcquireStringInfo(MagickPathExtent);
+        datum=GetStringInfoDatum(profile);
         for (i=0; (c=ProfileInteger(image,hex_digits)) != EOF; i++)
         {
-          SetStringInfoLength(profile,(size_t) i+1);
-          datum=GetStringInfoDatum(profile);
+          if (i >= (ssize_t) GetStringInfoLength(profile))
+            {
+              SetStringInfoLength(profile,(size_t) i << 1);
+              datum=GetStringInfoDatum(profile);
+            }
           datum[i]=(unsigned char) c;
         }
+        SetStringInfoLength(profile,(size_t) i+1);
         (void) SetImageProfile(image,"icc",profile,exception);
         profile=DestroyStringInfo(profile);
         continue;
@@ -652,6 +659,8 @@ static Image *ReadPSImage(const ImageInfo *image_info,ExceptionInfo *exception)
         if (count != 1)
           continue;
         length=extent;
+        if (length > GetBlobSize(image))
+          ThrowReaderException(CorruptImageError,"InsufficientImageDataInFile");
         profile=BlobToStringInfo((const void *) NULL,length);
         if (profile != (StringInfo *) NULL)
           {
@@ -719,8 +728,8 @@ static Image *ReadPSImage(const ImageInfo *image_info,ExceptionInfo *exception)
         /*
           Note spot names.
         */
-        (void) FormatLocaleString(property,MagickPathExtent,"ps:SpotColor-%.20g",
-          (double) (spotcolor++));
+        (void) FormatLocaleString(property,MagickPathExtent,
+          "ps:SpotColor-%.20g",(double) (spotcolor++));
         for (q=command; *q != '\0'; q++)
           if (isspace((int) (unsigned char) *q) != 0)
             break;
@@ -890,7 +899,8 @@ static Image *ReadPSImage(const ImageInfo *image_info,ExceptionInfo *exception)
           (IsStringTrue(option) != MagickFalse))
         (void) ConcatenateMagickString(options,"-dEPSCrop ",MagickPathExtent);
       if (fitPage != MagickFalse)
-        (void) ConcatenateMagickString(options,"-dEPSFitPage ",MagickPathExtent);
+        (void) ConcatenateMagickString(options,"-dEPSFitPage ",
+          MagickPathExtent);
     }
   (void) CopyMagickString(filename,read_info->filename,MagickPathExtent);
   (void) AcquireUniqueFilename(filename);
@@ -1038,6 +1048,7 @@ ModuleExport size_t RegisterPSImage(void)
   entry->decoder=(DecodeImageHandler *) ReadPSImage;
   entry->encoder=(EncodeImageHandler *) WritePSImage;
   entry->magick=(IsImageFormatHandler *) IsPS;
+  entry->flags|=CoderDecoderSeekableStreamFlag;
   entry->flags^=CoderAdjoinFlag;
   entry->flags^=CoderBlobSupportFlag;
   entry->mime_type=ConstantString("application/postscript");
@@ -1046,6 +1057,7 @@ ModuleExport size_t RegisterPSImage(void)
   entry->decoder=(DecodeImageHandler *) ReadPSImage;
   entry->encoder=(EncodeImageHandler *) WritePSImage;
   entry->magick=(IsImageFormatHandler *) IsPS;
+  entry->flags|=CoderDecoderSeekableStreamFlag;
   entry->flags^=CoderAdjoinFlag;
   entry->flags^=CoderBlobSupportFlag;
   entry->mime_type=ConstantString("application/postscript");
@@ -1054,6 +1066,7 @@ ModuleExport size_t RegisterPSImage(void)
   entry->decoder=(DecodeImageHandler *) ReadPSImage;
   entry->encoder=(EncodeImageHandler *) WritePSImage;
   entry->magick=(IsImageFormatHandler *) IsPS;
+  entry->flags|=CoderDecoderSeekableStreamFlag;
   entry->flags^=CoderAdjoinFlag;
   entry->flags^=CoderBlobSupportFlag;
   entry->mime_type=ConstantString("application/postscript");
@@ -1063,6 +1076,7 @@ ModuleExport size_t RegisterPSImage(void)
   entry->decoder=(DecodeImageHandler *) ReadPSImage;
   entry->encoder=(EncodeImageHandler *) WritePSImage;
   entry->magick=(IsImageFormatHandler *) IsPS;
+  entry->flags|=CoderDecoderSeekableStreamFlag;
   entry->flags^=CoderAdjoinFlag;
   entry->flags^=CoderBlobSupportFlag;
   entry->mime_type=ConstantString("application/postscript");
@@ -1072,6 +1086,7 @@ ModuleExport size_t RegisterPSImage(void)
   entry->encoder=(EncodeImageHandler *) WritePSImage;
   entry->magick=(IsImageFormatHandler *) IsPS;
   entry->mime_type=ConstantString("application/postscript");
+  entry->flags|=CoderDecoderSeekableStreamFlag;
   entry->flags^=CoderBlobSupportFlag;
   (void) RegisterMagickInfo(entry);
   return(MagickImageCoderSignature);
@@ -1153,7 +1168,7 @@ static MagickBooleanType WritePSImage(const ImageInfo *image_info,Image *image,
 {
 #define WriteRunlengthPacket(image,pixel,length,p) \
 { \
-  if ((image->alpha_trait != UndefinedPixelTrait) && \
+  if ((image->alpha_trait != UndefinedPixelTrait) && (length != 0) && \
       (GetPixelAlpha(image,p) == (Quantum) TransparentAlpha)) \
     { \
       q=PopHexPixel(hex_digits,0xff,q); \
@@ -1999,8 +2014,8 @@ RestoreMSCWarning
           /*
             Dump DirectClass image.
           */
-          (void) FormatLocaleString(buffer,MagickPathExtent,"%.20g %.20g\n0\n%d\n",
-            (double) image->columns,(double) image->rows,
+          (void) FormatLocaleString(buffer,MagickPathExtent,
+            "%.20g %.20g\n0\n%d\n",(double) image->columns,(double) image->rows,
             compression == RLECompression ? 1 : 0);
           (void) WriteBlobString(image,buffer);
           switch (compression)

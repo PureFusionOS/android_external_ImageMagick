@@ -1280,7 +1280,7 @@ MagickPrivate XMLTreeInfo *InsertTagIntoXMLTree(XMLTreeInfo *xml_info,
 %
 %  A description of each parameter follows:
 %
-%    o xml:  The XML string.
+%    o xml:  A null-terminated XML string.
 %
 %    o exception: return any errors or warnings in this structure.
 %
@@ -2732,7 +2732,7 @@ static char *XMLTreeTagToXML(XMLTreeInfo *xml_info,char **source,size_t *length,
   if (*xml_info->content != '\0')
     *length+=FormatLocaleString(*source+(*length),*extent,"</%s>",
       xml_info->tag);
-  while ((content[offset] != '\0') && (offset < xml_info->offset))
+  while ((offset < xml_info->offset) && (content[offset] != '\0'))
     offset++;
   if (xml_info->ordered != (XMLTreeInfo *) NULL)
     content=XMLTreeTagToXML(xml_info->ordered,source,length,extent,offset,

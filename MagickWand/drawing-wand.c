@@ -1959,11 +1959,14 @@ WandExport double *DrawGetStrokeDashArray(const DrawingWand *wand,
     {
       dasharray=(double *) AcquireQuantumMemory((size_t) n+1UL,
         sizeof(*dasharray));
-      p=CurrentContext->dash_pattern;
-      q=dasharray;
-      for (i=0; i < (ssize_t) n; i++)
-        *q++=(*p++);
-      *q=0.0;
+      if (dasharray != (double *) NULL)
+        {
+          p=CurrentContext->dash_pattern;
+          q=dasharray;
+          for (i=0; i < (ssize_t) n; i++)
+            *q++=(*p++);
+          *q=0.0;
+        }
     }
   return(dasharray);
 }
@@ -6078,7 +6081,7 @@ WandExport void DrawSetTextInterlineSpacing(DrawingWand *wand,
 
   if (wand->debug != MagickFalse)
     (void) LogMagickEvent(WandEvent,GetMagickModule(),"%s",wand->name);
-  if ((wand->filter_off != MagickFalse) &&
+  if ((wand->filter_off != MagickFalse) ||
       (fabs((CurrentContext->interline_spacing-
         interline_spacing)) >= MagickEpsilon))
     {
@@ -6120,7 +6123,7 @@ WandExport void DrawSetTextInterwordSpacing(DrawingWand *wand,
 
   if (wand->debug != MagickFalse)
     (void) LogMagickEvent(WandEvent,GetMagickModule(),"%s",wand->name);
-  if ((wand->filter_off != MagickFalse) &&
+  if ((wand->filter_off != MagickFalse) ||
       (fabs((CurrentContext->interword_spacing-
         interword_spacing)) >= MagickEpsilon))
     {
