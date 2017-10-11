@@ -2439,8 +2439,6 @@ static Image *ReadOnePNGImage(MngInfo *mng_info,
 #endif
      }
 
-    ping_preserve_iCCP=MagickTrue;
-
     value=GetImageOption(image_info,"profile:skip");
 
     if (IsOptionMember("ICC",value) == MagickFalse)
@@ -4333,28 +4331,28 @@ static Image *ReadPNGImage(const ImageInfo *image_info,
 %    o exception: return any errors or warnings in this structure.
 %
 */
-void
+static void
 DestroyJNG(unsigned char *chunk,Image **color_image,
-   ImageInfo **color_image_info,
-   Image **alpha_image,ImageInfo **alpha_image_info)
+  ImageInfo **color_image_info,Image **alpha_image,
+  ImageInfo **alpha_image_info)
 {
   (void) RelinquishMagickMemory(chunk);
-  if (*color_image_info)
+  if (color_image_info && *color_image_info)
   {
     DestroyImageInfo(*color_image_info);
     *color_image_info = (ImageInfo *)NULL;
   }
-  if (*alpha_image_info)
+  if (alpha_image_info && *alpha_image_info)
   {
     DestroyImageInfo(*alpha_image_info);
     *alpha_image_info = (ImageInfo *)NULL;
   }
-  if (*color_image)
+  if (color_image && *color_image)
   {
     DestroyImage(*color_image);
     *color_image = (Image *)NULL;
   }
-  if (*alpha_image)
+  if (alpha_image && *alpha_image)
   {
     DestroyImage(*alpha_image);
     *alpha_image = (Image *)NULL;
@@ -4532,8 +4530,13 @@ static Image *ReadOneJNGImage(MngInfo *mng_info,
             jng_width=(png_uint_32)mng_get_long(p);
             jng_height=(png_uint_32)mng_get_long(&p[4]);
             if ((jng_width == 0) || (jng_height == 0))
+            {
+              DestroyJNG(chunk,&color_image,&color_image_info,
+                &alpha_image,&alpha_image_info);
+
               ThrowReaderException(CorruptImageError,
                 "NegativeOrZeroImageSize");
+            }
             jng_color_type=p[8];
             jng_image_sample_depth=p[9];
             jng_image_compression_method=p[10];
@@ -4605,13 +4608,21 @@ static Image *ReadOneJNGImage(MngInfo *mng_info,
         color_image_info=(ImageInfo *)AcquireMagickMemory(sizeof(ImageInfo));
 
         if (color_image_info == (ImageInfo *) NULL)
+        {
+          DestroyJNG(chunk,&color_image,&color_image_info,
+              &alpha_image,&alpha_image_info);
           ThrowReaderException(ResourceLimitError,"MemoryAllocationFailed");
+        }
 
         GetImageInfo(color_image_info);
         color_image=AcquireImage(color_image_info,exception);
 
         if (color_image == (Image *) NULL)
+        {
+          DestroyJNG(chunk,&color_image,&color_image_info,
+              &alpha_image,&alpha_image_info);
           ThrowReaderException(ResourceLimitError,"MemoryAllocationFailed");
+        }
 
         if (logging != MagickFalse)
           (void) LogMagickEvent(CoderEvent,GetMagickModule(),
@@ -4623,7 +4634,8 @@ static Image *ReadOneJNGImage(MngInfo *mng_info,
 
         if (status == MagickFalse)
           {
-            color_image=DestroyImage(color_image);
+            DestroyJNG(chunk,&color_image,&color_image_info,
+              &alpha_image,&alpha_image_info);
             return(DestroyImageList(image));
           }
 
@@ -4634,7 +4646,8 @@ static Image *ReadOneJNGImage(MngInfo *mng_info,
 
             if (alpha_image_info == (ImageInfo *) NULL)
               {
-                color_image=DestroyImage(color_image);
+                DestroyJNG(chunk,&color_image,&color_image_info,
+                  &alpha_image,&alpha_image_info);
                 ThrowReaderException(ResourceLimitError,
                   "MemoryAllocationFailed");
               }
@@ -4644,8 +4657,8 @@ static Image *ReadOneJNGImage(MngInfo *mng_info,
 
             if (alpha_image == (Image *) NULL)
               {
-                alpha_image_info=DestroyImageInfo(alpha_image_info);
-                color_image=DestroyImage(color_image);
+                DestroyJNG(chunk,&color_image,&color_image_info,
+                  &alpha_image,&alpha_image_info);
                 ThrowReaderException(ResourceLimitError,
                   "MemoryAllocationFailed");
               }
@@ -4660,9 +4673,8 @@ static Image *ReadOneJNGImage(MngInfo *mng_info,
 
             if (status == MagickFalse)
               {
-                alpha_image=DestroyImage(alpha_image);
-                alpha_image_info=DestroyImageInfo(alpha_image_info);
-                color_image=DestroyImage(color_image);
+                DestroyJNG(chunk,&color_image,&color_image_info,
+                  &alpha_image,&alpha_image_info);
                 return(DestroyImageList(image));
               }
 
@@ -4944,7 +4956,11 @@ static Image *ReadOneJNGImage(MngInfo *mng_info,
   color_image_info=DestroyImageInfo(color_image_info);
 
   if (jng_image == (Image *) NULL)
+  {
+    DestroyJNG(NULL,NULL,NULL,&alpha_image,&alpha_image_info);
     return(DestroyImageList(image));
+  }
+
 
   if (logging != MagickFalse)
     (void) LogMagickEvent(CoderEvent,GetMagickModule(),
@@ -4955,7 +4971,11 @@ static Image *ReadOneJNGImage(MngInfo *mng_info,
 
   status=SetImageExtent(image,image->columns,image->rows,exception);
   if (status == MagickFalse)
-    return(DestroyImageList(image));
+    {
+      jng_image=DestroyImage(jng_image);
+      DestroyJNG(NULL,NULL,NULL,&alpha_image,&alpha_image_info);
+      return(DestroyImageList(image));
+    }
 
   for (y=0; y < (ssize_t) image->rows; y++)
   {
@@ -4976,66 +4996,63 @@ static Image *ReadOneJNGImage(MngInfo *mng_info,
 
   jng_image=DestroyImage(jng_image);
 
-  if (image_info->ping == MagickFalse)
+  if ((image_info->ping == MagickFalse) && (jng_color_type >= 12))
     {
-     if (jng_color_type >= 12)
-       {
-         if (jng_alpha_compression_method == 0)
-           {
-             png_byte
-               data[5];
-             (void) WriteBlobMSBULong(alpha_image,0x00000000L);
-             PNGType(data,mng_IEND);
-             LogPNGChunk(logging,mng_IEND,0L);
-             (void) WriteBlob(alpha_image,4,data);
-             (void) WriteBlobMSBULong(alpha_image,crc32(0,data,4));
-           }
+      if (jng_alpha_compression_method == 0)
+        {
+          png_byte
+            data[5];
+          (void) WriteBlobMSBULong(alpha_image,0x00000000L);
+          PNGType(data,mng_IEND);
+          LogPNGChunk(logging,mng_IEND,0L);
+          (void) WriteBlob(alpha_image,4,data);
+          (void) WriteBlobMSBULong(alpha_image,crc32(0,data,4));
+        }
 
-         (void) CloseBlob(alpha_image);
+      (void) CloseBlob(alpha_image);
 
-         if (logging != MagickFalse)
-           (void) LogMagickEvent(CoderEvent,GetMagickModule(),
-             "    Reading alpha from alpha_blob.");
+      if (logging != MagickFalse)
+        (void) LogMagickEvent(CoderEvent,GetMagickModule(),
+          "    Reading alpha from alpha_blob.");
 
-         (void) FormatLocaleString(alpha_image_info->filename,MagickPathExtent,
-           "%s",alpha_image->filename);
+      (void) FormatLocaleString(alpha_image_info->filename,MagickPathExtent,
+        "%s",alpha_image->filename);
 
-         jng_image=ReadImage(alpha_image_info,exception);
+      jng_image=ReadImage(alpha_image_info,exception);
 
-         if (jng_image != (Image *) NULL)
-           for (y=0; y < (ssize_t) image->rows; y++)
-           {
-             s=GetVirtualPixels(jng_image,0,y,image->columns,1,
-               exception);
-             q=GetAuthenticPixels(image,0,y,image->columns,1,exception);
+      if (jng_image != (Image *) NULL)
+        for (y=0; y < (ssize_t) image->rows; y++)
+        {
+          s=GetVirtualPixels(jng_image,0,y,image->columns,1,
+            exception);
+          q=GetAuthenticPixels(image,0,y,image->columns,1,exception);
 
-             if (image->alpha_trait != UndefinedPixelTrait)
-               for (x=(ssize_t) image->columns; x != 0; x--)
-               {
-                  SetPixelAlpha(image,GetPixelRed(jng_image,s),q);
-                  q+=GetPixelChannels(image);
-                  s+=GetPixelChannels(jng_image);
-               }
+          if (image->alpha_trait != UndefinedPixelTrait)
+            for (x=(ssize_t) image->columns; x != 0; x--)
+            {
+              SetPixelAlpha(image,GetPixelRed(jng_image,s),q);
+              q+=GetPixelChannels(image);
+              s+=GetPixelChannels(jng_image);
+            }
 
-             else
-               for (x=(ssize_t) image->columns; x != 0; x--)
-               {
-                  SetPixelAlpha(image,GetPixelRed(jng_image,s),q);
-                  if (GetPixelAlpha(image,q) != OpaqueAlpha)
-                    image->alpha_trait=BlendPixelTrait;
-                  q+=GetPixelChannels(image);
-                  s+=GetPixelChannels(jng_image);
-               }
+          else
+            for (x=(ssize_t) image->columns; x != 0; x--)
+            {
+              SetPixelAlpha(image,GetPixelRed(jng_image,s),q);
+              if (GetPixelAlpha(image,q) != OpaqueAlpha)
+                image->alpha_trait=BlendPixelTrait;
+              q+=GetPixelChannels(image);
+              s+=GetPixelChannels(jng_image);
+            }
 
-             if (SyncAuthenticPixels(image,exception) == MagickFalse)
-               break;
-           }
-         (void) RelinquishUniqueFileResource(alpha_image->filename);
-         alpha_image=DestroyImage(alpha_image);
-         alpha_image_info=DestroyImageInfo(alpha_image_info);
-         if (jng_image != (Image *) NULL)
-           jng_image=DestroyImage(jng_image);
-       }
+          if (SyncAuthenticPixels(image,exception) == MagickFalse)
+            break;
+        }
+      (void) RelinquishUniqueFileResource(alpha_image->filename);
+      alpha_image=DestroyImage(alpha_image);
+      alpha_image_info=DestroyImageInfo(alpha_image_info);
+      if (jng_image != (Image *) NULL)
+        jng_image=DestroyImage(jng_image);
     }
 
   /* Read the JNG image.  */
@@ -6891,9 +6908,13 @@ static Image *ReadOneMNGImage(MngInfo* mng_info, const ImageInfo *image_info,
                 if ((prev == (Quantum *) NULL) ||
                     (next == (Quantum *) NULL))
                   {
-                     image=DestroyImageList(image);
-                     ThrowReaderException(ResourceLimitError,
-                       "MemoryAllocationFailed");
+                    if (prev != (Quantum *) NULL)
+                      prev=(Quantum *) RelinquishMagickMemory(prev);
+                    if (next != (Quantum *) NULL)
+                      next=(Quantum *) RelinquishMagickMemory(next);
+                    image=DestroyImageList(image);
+                    ThrowReaderException(ResourceLimitError,
+                      "MemoryAllocationFailed");
                   }
 
                 n=GetAuthenticPixels(image,0,0,image->columns,1,exception);
@@ -8128,15 +8149,12 @@ static inline MagickBooleanType Magick_png_color_equal(const Image *image,
 
 #if defined(PNG_tIME_SUPPORTED)
 static void write_tIME_chunk(Image *image,png_struct *ping,png_info *info,
-  const char *date,ExceptionInfo *exception)
+  const char *timestamp,ExceptionInfo *exception)
 {
-  const char
-    *timestamp;
-
   int
     ret;
 
-  unsigned int
+  int
     day,
     hour,
     minute,
@@ -8151,17 +8169,13 @@ static void write_tIME_chunk(Image *image,png_struct *ping,png_info *info,
   png_time
     ptime;
 
-  if (date == (const char *) NULL)
-    timestamp=GetImageProperty(image,"date:modify",exception);
-  else
-    timestamp=date;
-
+  assert(timestamp != (const char *) NULL);
   LogMagickEvent(CoderEvent,GetMagickModule(),
       "  Writing tIME chunk: timestamp property is %30s\n",timestamp);
   ret=sscanf(timestamp,"%d-%d-%dT%d:%d:%d",&year,&month,&day,&hour,
       &minute, &second);
-  addhours=0;     
-  addminutes=0;     
+  addhours=0;
+  addminutes=0;
   ret=sscanf(timestamp,"%d-%d-%dT%d:%d:%d%d:%d",&year,&month,&day,&hour,
       &minute, &second, &addhours, &addminutes);
     LogMagickEvent(CoderEvent,GetMagickModule(),
@@ -8178,65 +8192,67 @@ static void write_tIME_chunk(Image *image,png_struct *ping,png_info *info,
       image->filename,ret);
     return;
   }
-  ptime.year=(png_uint_16) year;
-  ptime.month=(png_byte) month;
-  ptime.day=(png_byte) day;
   if (addhours < 0)
   {
     addhours+=24;
-    ptime.hour=(png_byte) hour+addhours;
-    ptime.day--;
-    if (ptime.day == 0)
+    addminutes=-addminutes;
+    day--;
+  }
+  hour+=addhours;
+  minute+=addminutes;
+  if (day == 0)
+  {
+    month--;
+    day=31;
+    if(month == 2)
+      day=28;
+    else
     {
-      ptime.month--;
-      if(ptime.month == 2)
-        ptime.day=28;
+      if(month == 4 || month == 6 || month == 9 || month == 11)
+        day=30;
       else
-      {
-        if(ptime.month == 4 || ptime.month == 6 || ptime.month == 9 ||
-           ptime.month == 11)
-          ptime.day=30;
-        else
-          ptime.day=31;
-      }
-    }
-    if (ptime.month == 0)
-    {
-      ptime.month++;
-      ptime.year--;
+        day=31;
     }
   }
-  ptime.hour=(png_byte) hour+addhours;
-  ptime.minute=(png_byte) minute+addminutes;
-  ptime.second=(png_byte) second;
-  if (ptime.minute > 60)
+  if (month == 0)
   {
-     ptime.hour++;
-     ptime.minute-=60;
+    month++;
+    year--;
   }
-  if (ptime.hour > 24)
+  if (minute > 59)
   {
-     ptime.day ++;
-     ptime.hour -=24;
+     hour++;
+     minute-=60;
   }
-  if (ptime.hour < 0)
+  if (hour > 23)
   {
-     ptime.day --;
-     ptime.hour +=24;
+     day ++;
+     hour -=24;
+  }
+  if (hour < 0)
+  {
+     day --;
+     hour +=24;
   }
   /* To do: fix this for leap years */
-  if (ptime.day > 31 || (ptime.month == 2 && ptime.day > 28) ||
-      ((ptime.month == 4 || ptime.month == 6 || ptime.month == 9 ||
-      ptime.month == 11) && ptime.day > 30))
+  if (day > 31 || (month == 2 && day > 28) || ((month == 4 || month == 6 ||
+      month == 9 || month == 11) && day > 30))
   {
-     ptime.month++;
-     ptime.day = 1;
+     month++;
+     day = 1;
   }
-  if (ptime.month > 12)
+  if (month > 12)
   {
-     ptime.year++;
-     ptime.month=1;
+     year++;
+     month=1;
   }
+
+  ptime.year = year;
+  ptime.month = month;
+  ptime.day = day;
+  ptime.hour = hour;
+  ptime.minute = minute;
+  ptime.second = second;
 
   LogMagickEvent(CoderEvent,GetMagickModule(),
       "      png_set_tIME: y=%d, m=%d, d=%d, h=%d, m=%d, s=%d, ah=%d, am=%d",

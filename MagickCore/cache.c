@@ -150,9 +150,6 @@ static void
 /*
   Global declarations.
 */
-static volatile MagickBooleanType
-  instantiate_cache = MagickFalse;
-
 static SemaphoreInfo
   *cache_semaphore = (SemaphoreInfo *) NULL;
 
@@ -373,9 +370,7 @@ MagickPrivate void CacheComponentTerminus(void)
 {
   if (cache_semaphore == (SemaphoreInfo *) NULL)
     ActivateSemaphoreInfo(&cache_semaphore);
-  LockSemaphoreInfo(cache_semaphore);
-  instantiate_cache=MagickFalse;
-  UnlockSemaphoreInfo(cache_semaphore);
+  /* no op-- nothing to destroy */
   RelinquishSemaphoreInfo(&cache_semaphore);
 }
 
@@ -416,8 +411,6 @@ MagickPrivate Cache ClonePixelCache(const Cache cache)
     (void) LogMagickEvent(TraceEvent,GetMagickModule(),"%s",
       cache_info->filename);
   clone_info=(CacheInfo *) AcquirePixelCache(cache_info->number_threads);
-  if (clone_info == (Cache) NULL)
-    return((Cache) NULL);
   clone_info->virtual_pixel_method=cache_info->virtual_pixel_method;
   return((Cache ) clone_info);
 }
@@ -1645,8 +1638,6 @@ static Cache GetImagePixelCache(Image *image,const MagickBooleanType clone,
                   exception);
               if (status != MagickFalse)
                 {
-                  if (cache_info->reference_count == 1)
-                    cache_info->nexus_info=(NexusInfo **) NULL;
                   destroy=MagickTrue;
                   image->cache=clone_image.cache;
                 }
@@ -3298,21 +3289,6 @@ MagickPrivate const Quantum *GetVirtualPixelsNexus(const Cache cache,
 %
 */
 
-#if defined(__cplusplus) || defined(c_plusplus)
-extern "C" {
-#endif
-
-#if defined(SIGBUS)
-static void CacheSignalHandler(int status)
-{
-  ThrowFatalException(CacheFatalError,"UnableToExtendPixelCache");
-}
-#endif
-
-#if defined(__cplusplus) || defined(c_plusplus)
-}
-#endif
-
 static MagickBooleanType OpenPixelCacheOnDisk(CacheInfo *cache_info,
   const MapMode mode)
 {
@@ -3435,9 +3411,6 @@ static MagickBooleanType SetPixelCacheExtent(Image *image,MagickSizeType length)
 #if defined(MAGICKCORE_HAVE_POSIX_FALLOCATE)
       if (cache_info->synchronize != MagickFalse)
         (void) posix_fallocate(cache_info->file,offset+1,extent-offset);
-#endif
-#if defined(SIGBUS)
-      (void) signal(SIGBUS,CacheSignalHandler);
 #endif
     }
   offset=(MagickOffsetType) lseek(cache_info->file,0,SEEK_SET);
@@ -3852,8 +3825,6 @@ MagickExport MagickBooleanType PersistPixelCache(Image *image,
         MagickPathExtent);
       cache_info->type=DiskCache;
       cache_info->offset=(*offset);
-      cache_info->nexus_info=DestroyPixelCacheNexus(cache_info->nexus_info,
-        cache_info->number_threads);
       if (OpenPixelCache(image,ReadMode,exception) == MagickFalse)
         return(MagickFalse);
       *offset+=cache_info->length+page_size-(cache_info->length % page_size);
@@ -4802,7 +4773,13 @@ static Quantum *SetPixelCacheNexusPixels(const CacheInfo *cache_info,
   assert(cache_info->signature == MagickCoreSignature);
   if (cache_info->type == UndefinedCache)
     return((Quantum *) NULL);
+  if ((region->width == 0) || (region->height == 0))
+    return((Quantum *) NULL);
   nexus_info->region=(*region);
+  number_pixels=(MagickSizeType) nexus_info->region.width*
+    nexus_info->region.height;
+  if (number_pixels == 0)
+    return((Quantum *) NULL);
   if ((cache_info->type == MemoryCache) || (cache_info->type == MapCache))
     {
       ssize_t
@@ -4840,8 +4817,6 @@ static Quantum *SetPixelCacheNexusPixels(const CacheInfo *cache_info,
   /*
     Pixels are stored in a staging region until they are synced to the cache.
   */
-  number_pixels=(MagickSizeType) nexus_info->region.width*
-    nexus_info->region.height;
   length=number_pixels*cache_info->number_channels*sizeof(Quantum);
   if (cache_info->metacontent_extent != 0)
     length+=number_pixels*cache_info->metacontent_extent;

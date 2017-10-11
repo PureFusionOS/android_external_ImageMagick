@@ -133,7 +133,6 @@ static Image *ReadTIMImage(const ImageInfo *image_info,ExceptionInfo *exception)
     y;
 
   unsigned char
-    *tim_data,
     *tim_pixels;
 
   unsigned short
@@ -202,7 +201,11 @@ static Image *ReadTIMImage(const ImageInfo *image_info,ExceptionInfo *exception)
           ThrowReaderException(ResourceLimitError,"MemoryAllocationFailed");
         count=ReadBlob(image,2*image->colors,tim_colormap);
         if (count != (ssize_t) (2*image->colors))
-          ThrowReaderException(CorruptImageError,"InsufficientImageDataInFile");
+          {
+            tim_colormap=(unsigned char *) RelinquishMagickMemory(tim_colormap);
+            ThrowReaderException(CorruptImageError,
+              "InsufficientImageDataInFile");
+          }
         p=tim_colormap;
         for (i=0; i < (ssize_t) image->colors; i++)
         {
@@ -234,14 +237,16 @@ static Image *ReadTIMImage(const ImageInfo *image_info,ExceptionInfo *exception)
     image_size=2*width*height;
     bytes_per_line=width*2;
     width=(width*16)/bits_per_pixel;
-    tim_data=(unsigned char *) AcquireQuantumMemory(image_size,
-      sizeof(*tim_data));
-    if (tim_data == (unsigned char *) NULL)
+    tim_pixels=(unsigned char *) AcquireQuantumMemory(image_size,
+      sizeof(*tim_pixels));
+    if (tim_pixels == (unsigned char *) NULL)
       ThrowReaderException(ResourceLimitError,"MemoryAllocationFailed");
-    count=ReadBlob(image,image_size,tim_data);
+    count=ReadBlob(image,image_size,tim_pixels);
     if (count != (ssize_t) (image_size))
-      ThrowReaderException(CorruptImageError,"InsufficientImageDataInFile");
-    tim_pixels=tim_data;
+      {
+        tim_pixels=(unsigned char *) RelinquishMagickMemory(tim_pixels);
+        ThrowReaderException(CorruptImageError,"InsufficientImageDataInFile");
+      }
     /*
       Initialize image structure.
     */
@@ -383,7 +388,10 @@ static Image *ReadTIMImage(const ImageInfo *image_info,ExceptionInfo *exception)
         break;
       }
       default:
+      {
+        tim_pixels=(unsigned char *) RelinquishMagickMemory(tim_pixels);
         ThrowReaderException(CorruptImageError,"ImproperImageHeader");
+      }
     }
     if (image->storage_class == PseudoClass)
       (void) SyncImage(image,exception);

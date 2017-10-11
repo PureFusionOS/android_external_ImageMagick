@@ -455,7 +455,10 @@ static unsigned char *DecodeImage(Image *blob,Image *image,
   scanline=(unsigned char *) AcquireQuantumMemory(row_bytes,2*
     sizeof(*scanline));
   if (scanline == (unsigned char *) NULL)
-    return((unsigned char *) NULL);
+    {
+      pixels=(unsigned char *) RelinquishMagickMemory(pixels);
+      return((unsigned char *) NULL);
+    }
   if (bytes_per_line < 8)
     {
       /*
@@ -1338,7 +1341,7 @@ static Image *ReadPICTImage(const ImageInfo *image_info,
             if (length == 0)
               break;
             (void) ReadBlobMSBLong(image);
-            length-=4;
+            length-=MagickMin(length,4);
             if (length == 0)
               break;
             info=(unsigned char *) AcquireQuantumMemory(length,sizeof(*info));
@@ -1346,7 +1349,11 @@ static Image *ReadPICTImage(const ImageInfo *image_info,
               break;
             count=ReadBlob(image,length,info);
             if (count != (ssize_t) length)
-              ThrowReaderException(ResourceLimitError,"UnableToReadImageData");
+              {
+                info=(unsigned char *) RelinquishMagickMemory(info);
+                ThrowReaderException(ResourceLimitError,
+                  "UnableToReadImageData");
+              }
             switch (type)
             {
               case 0xe0:

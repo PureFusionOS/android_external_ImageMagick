@@ -46,6 +46,7 @@
 #include "MagickCore/log.h"
 #include "MagickCore/magick.h"
 #include "MagickCore/memory_.h"
+#include "MagickCore/memory-private.h"
 #include "MagickCore/nt-base.h"
 #include "MagickCore/nt-base-private.h"
 #include "MagickCore/resource_.h"
@@ -350,7 +351,7 @@ MagickPrivate int Exit(int status)
   exit(status);
 }
 
-#if !defined(__MINGW32__) && !defined(__MINGW64__)
+#if !defined(__MINGW32__)
 /*
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %                                                                             %
@@ -1787,7 +1788,7 @@ MagickPrivate DIR *NTOpenDirectory(const char *path)
   if (wcsncat(file_specification,(const wchar_t*) DirectorySeparator,
         MagickPathExtent-wcslen(file_specification)-1) == (wchar_t*) NULL)
     return((DIR *) NULL);
-  entry=(DIR *) AcquireMagickMemory(sizeof(DIR));
+  entry=(DIR *) AcquireCriticalMemory(sizeof(DIR));
   if (entry != (DIR *) NULL)
     {
       entry->firsttime=TRUE;
@@ -2027,8 +2028,9 @@ MagickPrivate unsigned char *NTRegistryKeyLookup(const char *subkey)
   /*
     Look-up base key.
   */
-  (void) FormatLocaleString(package_key,MagickPathExtent,"SOFTWARE\\%s\\%s\\Q:%d",
-    MagickPackageName,MagickLibVersionText,MAGICKCORE_QUANTUM_DEPTH);
+  (void) FormatLocaleString(package_key,MagickPathExtent,
+    "SOFTWARE\\%s\\%s\\Q:%d",MagickPackageName,MagickLibVersionText,
+    MAGICKCORE_QUANTUM_DEPTH);
   (void) LogMagickEvent(ConfigureEvent,GetMagickModule(),"%s",package_key);
   registry_key=(HKEY) INVALID_HANDLE_VALUE;
   status=RegOpenKeyExA(HKEY_LOCAL_MACHINE,package_key,0,KEY_READ,&registry_key);
@@ -2036,10 +2038,7 @@ MagickPrivate unsigned char *NTRegistryKeyLookup(const char *subkey)
     status=RegOpenKeyExA(HKEY_CURRENT_USER,package_key,0,KEY_READ,
       &registry_key);
   if (status != ERROR_SUCCESS)
-    {
-      registry_key=(HKEY) INVALID_HANDLE_VALUE;
-      return((unsigned char *) NULL);
-    }
+    return((unsigned char *) NULL);
   /*
     Look-up sub key.
   */
@@ -2792,7 +2791,7 @@ MagickPrivate void NTWindowsGenesis(void)
       (void) SetErrorMode(StringToInteger(mode));
       mode=DestroyString(mode);
     }
-#if defined(_DEBUG) && !defined(__BORLANDC__) && !defined(__MINGW32__) && !defined(__MINGW64__)
+#if defined(_DEBUG) && !defined(__BORLANDC__) && !defined(__MINGW32__)
   if (IsEventLogging() != MagickFalse)
     {
       int

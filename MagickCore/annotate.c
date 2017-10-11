@@ -83,7 +83,7 @@
 #include "MagickCore/xwindow.h"
 #include "MagickCore/xwindow-private.h"
 #if defined(MAGICKCORE_FREETYPE_DELEGATE)
-#if defined(__MINGW32__) || defined(__MINGW64__)
+#if defined(__MINGW32__)
 #  undef interface
 #endif
 #include <ft2build.h>
@@ -1382,14 +1382,15 @@ static MagickBooleanType RenderFreetype(Image *image,const DrawInfo *draw_info,
       args.pathname=ConstantString(draw_info->font+1);
   face=(FT_Face) NULL;
   ft_status=FT_Open_Face(library,&args,(long) draw_info->face,&face);
-  args.pathname=DestroyString(args.pathname);
   if (ft_status != 0)
     {
       (void) FT_Done_FreeType(library);
       (void) ThrowMagickException(exception,GetMagickModule(),TypeError,
-        "UnableToReadFont","`%s'",draw_info->font);
+        "UnableToReadFont","`%s'",args.pathname);
+      args.pathname=DestroyString(args.pathname);
       return(MagickFalse);
     }
+  args.pathname=DestroyString(args.pathname);
   if ((draw_info->metrics != (char *) NULL) &&
       (IsPathAccessible(draw_info->metrics) != MagickFalse))
     (void) FT_Attach_File(face,draw_info->metrics);
@@ -1793,8 +1794,8 @@ static MagickBooleanType RenderFreetype(Image *image,const DrawInfo *draw_info,
               if (bitmap->left > metrics->width)
                 metrics->width=bitmap->left;
             }
+          FT_Done_Glyph(glyph.image);
         }
-      FT_Done_Glyph(glyph.image);
     }
   metrics->bounds.x1/=64.0;
   metrics->bounds.y1/=64.0;

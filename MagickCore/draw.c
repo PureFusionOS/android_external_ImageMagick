@@ -2643,7 +2643,7 @@ MagickExport MagickBooleanType DrawImage(Image *image,const DrawInfo *draw_info,
                     GetNextToken(r,&r,extent,token);
                 }
                 graphic_context[n]->dash_pattern=(double *)
-                  AcquireQuantumMemory((size_t) (2UL*x+1UL),
+                  AcquireQuantumMemory((size_t) (2UL*x+2UL),
                   sizeof(*graphic_context[n]->dash_pattern));
                 if (graphic_context[n]->dash_pattern == (double *) NULL)
                   {
@@ -4847,6 +4847,11 @@ static MagickBooleanType DrawStrokePolygon(Image *image,
   for (p=primitive_info; p->primitive != UndefinedPrimitive; p+=p->coordinates)
   {
     stroke_polygon=TraceStrokePolygon(draw_info,p);
+    if (stroke_polygon == (PrimitiveInfo *) NULL)
+      {
+        status=0;
+        break;
+      }
     status&=DrawPolygonPrimitive(image,clone_info,stroke_polygon,exception);
     if (status == 0)
       break;
@@ -5996,7 +6001,16 @@ static PrimitiveInfo *TraceStrokePolygon(const DrawInfo *draw_info,
     number_vertices+2UL,sizeof(*polygon_primitive));
   if ((path_p == (PointInfo *) NULL) || (path_q == (PointInfo *) NULL) ||
       (polygon_primitive == (PrimitiveInfo *) NULL))
-    return((PrimitiveInfo *) NULL);
+    {
+      if (path_p != (PointInfo *) NULL)
+        path_p=(PointInfo *) RelinquishMagickMemory(path_p);
+      if (path_q != (PointInfo *) NULL)
+        path_q=(PointInfo *) RelinquishMagickMemory(path_q);
+      if (polygon_primitive != (PrimitiveInfo *) NULL)
+        polygon_primitive=(PrimitiveInfo *) RelinquishMagickMemory(
+          polygon_primitive);
+      return((PrimitiveInfo *) NULL);
+    }
   (void) CopyMagickMemory(polygon_primitive,primitive_info,(size_t)
     number_vertices*sizeof(*polygon_primitive));
   closed_path=

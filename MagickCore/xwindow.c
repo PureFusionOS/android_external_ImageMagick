@@ -63,6 +63,7 @@
 #include "MagickCore/log.h"
 #include "MagickCore/magick.h"
 #include "MagickCore/memory_.h"
+#include "MagickCore/memory-private.h"
 #include "MagickCore/monitor.h"
 #include "MagickCore/nt-base-private.h"
 #include "MagickCore/option.h"
@@ -2159,20 +2160,12 @@ static void XDitherImage(Image *image,XImage *ximage,ExceptionInfo *exception)
   for (i=0; i < 2; i++)
     for (j=0; j < 16; j++)
     {
-      red_map[i][j]=(unsigned char *) AcquireQuantumMemory(256UL,
+      red_map[i][j]=(unsigned char *) AcquireCriticalMemory(256UL*
         sizeof(*red_map));
-      green_map[i][j]=(unsigned char *) AcquireQuantumMemory(256UL,
+      green_map[i][j]=(unsigned char *) AcquireCriticalMemory(256UL*
         sizeof(*green_map));
-      blue_map[i][j]=(unsigned char *) AcquireQuantumMemory(256UL,
+      blue_map[i][j]=(unsigned char *) AcquireCriticalMemory(256UL*
         sizeof(*blue_map));
-      if ((red_map[i][j] == (unsigned char *) NULL) ||
-          (green_map[i][j] == (unsigned char *) NULL) ||
-          (blue_map[i][j] == (unsigned char *) NULL))
-        {
-          ThrowXWindowException(ResourceLimitError,"MemoryAllocationFailed",
-            image->filename);
-          return;
-        }
     }
   /*
     Initialize dither tables.
@@ -4622,7 +4615,7 @@ MagickPrivate void XGetWindowInfo(Display *display,XVisualInfo *visual_info,
           *segment_info;
 
         if (window->segment_info == (void *) NULL)
-          window->segment_info=AcquireQuantumMemory(2,sizeof(*segment_info));
+          window->segment_info=AcquireCriticalMemory(2*sizeof(*segment_info));
         segment_info=(XShmSegmentInfo *) window->segment_info;
         segment_info[0].shmid=(-1);
         segment_info[0].shmaddr=(char *) NULL;

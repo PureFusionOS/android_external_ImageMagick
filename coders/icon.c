@@ -69,7 +69,7 @@
 /*
   Define declarations.
 */
-#if !defined(MAGICKCORE_WINDOWS_SUPPORT) || defined(__MINGW32__) || defined(__MINGW64__)
+#if !defined(MAGICKCORE_WINDOWS_SUPPORT) || defined(__MINGW32__)
 #define BI_RGB  0
 #define BI_RLE8  1
 #define BI_BITFIELDS  3
@@ -991,7 +991,8 @@ static MagickBooleanType WriteICONImage(const ImageInfo *image_info,
             return(MagickFalse);
           }
         write_info=CloneImageInfo(image_info);
-        (void) CopyMagickString(write_info->filename,"PNG:",MagickPathExtent);
+        (void) CopyMagickString(write_info->magick,"PNG",MagickPathExtent);
+        length=0;
 
         /* Don't write any ancillary chunks except for gAMA */
         (void) SetImageArtifact(write_image,"png:include-chunk","none,gama");

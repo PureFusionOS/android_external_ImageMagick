@@ -1025,7 +1025,7 @@ static TIFFMethodType GetJPEGMethod(Image* image,TIFF *tiff,uint16 photometric,
 #else
   uint32
 #endif
-    **value;
+    *value;
 
   unsigned char
     buffer[BUFFER_SIZE+32];
@@ -1033,12 +1033,17 @@ static TIFFMethodType GetJPEGMethod(Image* image,TIFF *tiff,uint16 photometric,
   unsigned short
     length;
 
-  /* only support 8 bit for now */
+  /*
+    Only support 8 bit for now.
+  */
   if ((photometric != PHOTOMETRIC_SEPARATED) || (bits_per_sample != 8) ||
       (samples_per_pixel != 4))
     return(ReadGenericMethod);
-  /* Search for Adobe APP14 JPEG Marker */
-  if (!TIFFGetField(tiff,TIFFTAG_STRIPOFFSETS,&value))
+  /*
+    Search for Adobe APP14 JPEG marker.
+  */
+  value=NULL;
+  if (!TIFFGetField(tiff,TIFFTAG_STRIPOFFSETS,&value) || (value == NULL))
     return(ReadRGBAMethod);
   position=TellBlob(image);
   offset=(MagickOffsetType) (value[0]);
@@ -1101,6 +1106,7 @@ static ssize_t TIFFReadCustomStream(unsigned char *data,const size_t count,
     return(-1);
   total=MagickMin(count, (size_t) remaining);
   (void) memcpy(data,profile->data->datum+profile->offset,total);
+  profile->offset+=total;
   return(total);
 }
 
@@ -1748,7 +1754,7 @@ RestoreMSCWarning
     quantum_type=RGBQuantum;
     tiff_pixels=(unsigned char *) AcquireMagickMemory(MagickMax(
       TIFFScanlineSize(tiff),(ssize_t) (image->columns*samples_per_pixel*
-      pow(2.0,ceil(log(bits_per_sample)/log(2.0))))));
+      pow(2.0,ceil(log(bits_per_sample)/log(2.0)))*sizeof(uint32))));
     if (tiff_pixels == (unsigned char *) NULL)
       ThrowTIFFException(ResourceLimitError,"MemoryAllocationFailed");
     switch (method)
@@ -3077,7 +3083,7 @@ static CustomStreamInfo *TIFFAcquireCustomStreamForWriting(
 }
 
 static MagickBooleanType TIFFWritePhotoshopLayers(Image* image,
-  const ImageInfo *image_info,ExceptionInfo *exception)
+  const ImageInfo *image_info,EndianType endian,ExceptionInfo *exception)
 {
   BlobInfo
     *blob;
@@ -3086,6 +3092,7 @@ static MagickBooleanType TIFFWritePhotoshopLayers(Image* image,
     *custom_stream;
 
   Image
+    *base_image,
     *next;
 
   ImageInfo
@@ -3103,8 +3110,8 @@ static MagickBooleanType TIFFWritePhotoshopLayers(Image* image,
   StringInfo
     *layers;
 
-  next=image->next;
-  if (next == (Image *) NULL)
+  base_image=CloneImage(image,0,0,MagickFalse,exception);
+  if (base_image == (Image *) NULL)
     return(MagickTrue);
   clone_info=CloneImageInfo(image_info);
   if (clone_info == (ImageInfo *) NULL)
@@ -3138,24 +3145,24 @@ static MagickBooleanType TIFFWritePhotoshopLayers(Image* image,
       ThrowBinaryException(ResourceLimitError,"MemoryAllocationFailed",
         image->filename);
     }
-  DestroyBlob(next);
-  next->blob=blob;
+  DestroyBlob(base_image);
+  base_image->blob=blob;
+  next=base_image;
   while (next != (Image *) NULL)
     next=SyncNextImageInList(next);
-  next=image->next;
-  AttachCustomStream(next->blob,custom_stream);
+  AttachCustomStream(base_image->blob,custom_stream);
   InitPSDInfo(image,&info);
-  if (next->endian == UndefinedEndian)
-    next->endian=(HOST_FILLORDER == FILLORDER_LSB2MSB) ? LSBEndian : MSBEndian;
-  WriteBlobString(next,"Adobe Photoshop Document Data Block");
-  WriteBlobByte(next,0);
-  WriteBlobString(next,next->endian == LSBEndian ? "MIB8ryaL" : "8BIMLayr");
-  status=WritePSDLayers(next,clone_info,&info,exception);
+  base_image->endian=endian;
+  WriteBlobString(base_image,"Adobe Photoshop Document Data Block");
+  WriteBlobByte(base_image,0);
+  WriteBlobString(base_image,base_image->endian == LSBEndian ? "MIB8ryaL" : "8BIMLayr");
+  status=WritePSDLayers(base_image,clone_info,&info,exception);
   if (status != MagickFalse)
     {
       SetStringInfoLength(layers,(size_t) profile.offset);
       status=SetImageProfile(image,"tiff:37724",layers,exception);
     }
+  next=base_image;
   while (next != (Image *) NULL)
   {
     CloseBlob(next);
@@ -3433,29 +3440,19 @@ static MagickBooleanType WriteTIFFImage(const ImageInfo *image_info,
   if (status == MagickFalse)
     return(status);
   (void) SetMagickThreadValue(tiff_exception,exception);
-  endian_type=UndefinedEndian;
+  endian_type=(HOST_FILLORDER == FILLORDER_LSB2MSB) ? LSBEndian : MSBEndian;
   option=GetImageOption(image_info,"tiff:endian");
   if (option != (const char *) NULL)
     {
       if (LocaleNCompare(option,"msb",3) == 0)
         endian_type=MSBEndian;
       if (LocaleNCompare(option,"lsb",3) == 0)
-        endian_type=LSBEndian;;
+        endian_type=LSBEndian;
     }
-  switch (endian_type)
-  {
-    case LSBEndian: mode="wl"; break;
-    case MSBEndian: mode="wb"; break;
-    default: mode="w"; break;
-  }
+  mode=endian_type == LSBEndian ? "wl" : "wb";
 #if defined(TIFF_VERSION_BIG)
   if (LocaleCompare(image_info->magick,"TIFF64") == 0)
-    switch (endian_type)
-    {
-      case LSBEndian: mode="wl8"; break;
-      case MSBEndian: mode="wb8"; break;
-      default: mode="w8"; break;
-    }
+    mode=endian_type == LSBEndian ? "wl8" : "wb8";
 #endif
   tiff=TIFFClientOpen(image->filename,mode,(thandle_t) image,TIFFReadBlob,
     TIFFWriteBlob,TIFFSeekBlob,TIFFCloseBlob,TIFFGetBlobSize,TIFFMapBlob,
@@ -3923,7 +3920,7 @@ static MagickBooleanType WriteTIFFImage(const ImageInfo *image_info,
     option=GetImageOption(image_info,"tiff:write-layers");
     if (IsStringTrue(option) != MagickFalse)
       {
-        (void) TIFFWritePhotoshopLayers(image,image_info,exception);
+        (void) TIFFWritePhotoshopLayers(image,image_info,endian_type,exception);
         adjoin=MagickFalse;
       }
     if ((LocaleCompare(image_info->magick,"PTIF") != 0) &&
@@ -4137,7 +4134,15 @@ RestoreMSCWarning
         blue=(uint16 *) AcquireQuantumMemory(65536,sizeof(*blue));
         if ((red == (uint16 *) NULL) || (green == (uint16 *) NULL) ||
             (blue == (uint16 *) NULL))
-          ThrowWriterException(ResourceLimitError,"MemoryAllocationFailed");
+          {
+            if (red != (uint16 *) NULL)
+              red=(uint16 *) RelinquishMagickMemory(red);
+            if (green != (uint16 *) NULL)
+              green=(uint16 *) RelinquishMagickMemory(green);
+            if (blue != (uint16 *) NULL)
+              blue=(uint16 *) RelinquishMagickMemory(blue);
+            ThrowWriterException(ResourceLimitError,"MemoryAllocationFailed");
+          }
         /*
           Initialize TIFF colormap.
         */

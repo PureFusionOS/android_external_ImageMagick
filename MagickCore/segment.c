@@ -93,6 +93,7 @@
 #include "MagickCore/image.h"
 #include "MagickCore/image-private.h"
 #include "MagickCore/memory_.h"
+#include "MagickCore/memory-private.h"
 #include "MagickCore/monitor.h"
 #include "MagickCore/monitor-private.h"
 #include "MagickCore/pixel-accessor.h"
@@ -197,6 +198,7 @@ static ssize_t
   DefineRegion(const short *,ExtentPacket *);
 
 static void
+  FreeNodes(IntervalTree *),
   InitializeHistogram(const Image *,ssize_t **,ExceptionInfo *),
   ScaleSpace(const ssize_t *,const double,double *),
   ZeroCrossHistogram(double *,const double,short *);
@@ -1364,12 +1366,15 @@ static IntervalTree *InitializeIntervalTree(const ZeroCrossing *zero_crossing,
   /*
     The root is the entire histogram.
   */
-  root=(IntervalTree *) AcquireMagickMemory(sizeof(*root));
+  root=(IntervalTree *) AcquireCriticalMemory(sizeof(*root));
   root->child=(IntervalTree *) NULL;
   root->sibling=(IntervalTree *) NULL;
   root->tau=0.0;
   root->left=0;
   root->right=255;
+  root->mean_stability=0.0;
+  root->stability=0.0;
+  (void) memset(list,0,TreeLength*sizeof(*list));
   for (i=(-1); i < (ssize_t) number_crossings; i++)
   {
     /*
@@ -1401,6 +1406,12 @@ static IntervalTree *InitializeIntervalTree(const ZeroCrossing *zero_crossing,
                   sizeof(*node->sibling));
                 node=node->sibling;
               }
+            if (node == (IntervalTree *) NULL)
+              {
+                list=(IntervalTree **) RelinquishMagickMemory(list);
+                FreeNodes(root);
+                return((IntervalTree *) NULL);
+              }
             node->tau=zero_crossing[i+1].tau;
             node->child=(IntervalTree *) NULL;
             node->sibling=(IntervalTree *) NULL;
@@ -1414,6 +1425,12 @@ static IntervalTree *InitializeIntervalTree(const ZeroCrossing *zero_crossing,
           node->sibling=(IntervalTree *) AcquireMagickMemory(
             sizeof(*node->sibling));
           node=node->sibling;
+          if (node == (IntervalTree *) NULL)
+            {
+              list=(IntervalTree **) RelinquishMagickMemory(list);
+              FreeNodes(root);
+              return((IntervalTree *) NULL);
+            }
           node->tau=zero_crossing[i+1].tau;
           node->child=(IntervalTree *) NULL;
           node->sibling=(IntervalTree *) NULL;
@@ -1537,19 +1554,18 @@ static double OptimalTau(const ssize_t *histogram,const double max_tau,
   zero_crossing=(ZeroCrossing *) AcquireQuantumMemory((size_t) count,
     sizeof(*zero_crossing));
   if (zero_crossing == (ZeroCrossing *) NULL)
-    return(0.0);
+    {
+      list=(IntervalTree **) RelinquishMagickMemory(list);
+      return(0.0);
+    }
   for (i=0; i < (ssize_t) count; i++)
     zero_crossing[i].tau=(-1.0);
   /*
     Initialize zero crossing list.
   */
-  derivative=(double *) AcquireQuantumMemory(256,sizeof(*derivative));
-  second_derivative=(double *) AcquireQuantumMemory(256,
+  derivative=(double *) AcquireCriticalMemory(256*sizeof(*derivative));
+  second_derivative=(double *) AcquireCriticalMemory(256*
     sizeof(*second_derivative));
-  if ((derivative == (double *) NULL) ||
-      (second_derivative == (double *) NULL))
-    ThrowFatalException(ResourceLimitFatalError,
-      "UnableToAllocateDerivatives");
   i=0;
   for (tau=max_tau; tau >= min_tau; tau-=delta_tau)
   {
@@ -1573,8 +1589,7 @@ static double OptimalTau(const ssize_t *histogram,const double max_tau,
     zero_crossing[i].crossings);
   number_crossings=(size_t) i;
   derivative=(double *) RelinquishMagickMemory(derivative);
-  second_derivative=(double *)
-    RelinquishMagickMemory(second_derivative);
+  second_derivative=(double *) RelinquishMagickMemory(second_derivative);
   /*
     Ensure the scale-space fingerprints form lines in scale-space, not loops.
   */
@@ -1598,7 +1613,11 @@ static double OptimalTau(const ssize_t *histogram,const double max_tau,
   */
   root=InitializeIntervalTree(zero_crossing,number_crossings);
   if (root == (IntervalTree *) NULL)
-    return(0.0);
+    {
+      zero_crossing=(ZeroCrossing *) RelinquishMagickMemory(zero_crossing);
+      list=(IntervalTree **) RelinquishMagickMemory(list);
+      return(0.0);
+    }
   /*
     Find active nodes:  stability is greater (or equal) to the mean stability of
     its children.
