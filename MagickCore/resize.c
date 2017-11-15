@@ -932,9 +932,7 @@ MagickPrivate ResizeFilter *AcquireResizeFilter(const Image *image,
   assert(UndefinedFilter < filter && filter < SentinelFilter);
   assert(exception != (ExceptionInfo *) NULL);
   assert(exception->signature == MagickCoreSignature);
-  resize_filter=(ResizeFilter *) AcquireMagickMemory(sizeof(*resize_filter));
-  if (resize_filter == (ResizeFilter *) NULL)
-    ThrowFatalException(ResourceLimitFatalError,"MemoryAllocationFailed");
+  resize_filter=(ResizeFilter *) AcquireCriticalMemory(sizeof(*resize_filter));
   (void) ResetMagickMemory(resize_filter,0,sizeof(*resize_filter));
   /*
     Defaults for the requested filter.
@@ -1758,7 +1756,7 @@ MagickExport Image *InterpolativeResizeImage(const Image *image,
   scale.y=(double) image->rows/resize_image->rows;
 #if defined(MAGICKCORE_OPENMP_SUPPORT)
   #pragma omp parallel for schedule(static,4) shared(progress,status) \
-    magick_threads(image,resize_image,resize_image->rows,1)
+    magick_number_threads(image,resize_image,resize_image->rows,1)
 #endif
   for (y=0; y < (ssize_t) resize_image->rows; y++)
   {
@@ -2105,7 +2103,7 @@ MagickExport Image *MagnifyImage(const Image *image,ExceptionInfo *exception)
   magnify_view=AcquireAuthenticCacheView(magnify_image,exception);
 #if defined(MAGICKCORE_OPENMP_SUPPORT)
   #pragma omp parallel for schedule(static,4) shared(progress,status) \
-    magick_threads(image,magnify_image,image->rows,1)
+    magick_number_threads(image,magnify_image,image->rows,1)
 #endif
   for (y=0; y < (ssize_t) image->rows; y++)
   {
@@ -2483,7 +2481,7 @@ static MagickBooleanType HorizontalFilter(const ResizeFilter *resize_filter,
   resize_view=AcquireAuthenticCacheView(resize_image,exception);
 #if defined(MAGICKCORE_OPENMP_SUPPORT)
   #pragma omp parallel for schedule(static,4) shared(status) \
-    magick_threads(image,resize_image,resize_image->columns,1)
+    magick_number_threads(image,resize_image,resize_image->columns,1)
 #endif
   for (x=0; x < (ssize_t) resize_image->columns; x++)
   {
@@ -2698,7 +2696,7 @@ static MagickBooleanType VerticalFilter(const ResizeFilter *resize_filter,
   resize_view=AcquireAuthenticCacheView(resize_image,exception);
 #if defined(MAGICKCORE_OPENMP_SUPPORT)
   #pragma omp parallel for schedule(static,4) shared(status) \
-    magick_threads(image,resize_image,resize_image->rows,1)
+    magick_number_threads(image,resize_image,resize_image->rows,1)
 #endif
   for (y=0; y < (ssize_t) resize_image->rows; y++)
   {
@@ -3094,7 +3092,7 @@ MagickExport Image *SampleImage(const Image *image,const size_t columns,
   sample_view=AcquireAuthenticCacheView(sample_image,exception);
 #if defined(MAGICKCORE_OPENMP_SUPPORT)
   #pragma omp parallel for schedule(static,4) shared(status) \
-    magick_threads(image,sample_image,1,1)
+    magick_number_threads(image,sample_image,sample_image->rows,1)
 #endif
   for (y=0; y < (ssize_t) sample_image->rows; y++)
   {

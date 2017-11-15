@@ -52,6 +52,7 @@
 #include "MagickCore/magic.h"
 #include "MagickCore/magick.h"
 #include "MagickCore/memory_.h"
+#include "MagickCore/memory-private.h"
 #include "MagickCore/module.h"
 #include "MagickCore/module-private.h"
 #include "MagickCore/nt-base-private.h"
@@ -140,9 +141,7 @@ MagickExport ModuleInfo *AcquireModuleInfo(const char *path,const char *tag)
   ModuleInfo
     *module_info;
 
-  module_info=(ModuleInfo *) AcquireMagickMemory(sizeof(*module_info));
-  if (module_info == (ModuleInfo *) NULL)
-    ThrowFatalException(ResourceLimitFatalError,"MemoryAllocationFailed");
+  module_info=(ModuleInfo *) AcquireCriticalMemory(sizeof(*module_info));
   (void) ResetMagickMemory(module_info,0,sizeof(*module_info));
   if (path != (const char *) NULL)
     module_info->path=ConstantString(path);
@@ -582,6 +581,15 @@ static MagickBooleanType GetMagickModulePath(const char *filename,
           (void) ConcatenateMagickString(path,DirectorySeparator,
             MagickPathExtent);
         (void) ConcatenateMagickString(path,filename,MagickPathExtent);
+#if defined(MAGICKCORE_HAVE_REALPATH)
+        {
+          char
+            resolved_path[PATH_MAX+1];
+
+          if (realpath(path,resolved_path) != (char *) NULL)
+            (void) CopyMagickString(path,resolved_path,MagickPathExtent);
+        }
+#endif
         if (IsPathAccessible(path) != MagickFalse)
           {
             module_path=DestroyString(module_path);
@@ -875,9 +883,6 @@ static MagickBooleanType IsModuleTreeInstantiated()
 
           splay_tree=NewSplayTree(CompareSplayTreeString,
             (void *(*)(void *)) NULL,DestroyModuleNode);
-          if (splay_tree == (SplayTreeInfo *) NULL)
-            ThrowFatalException(ResourceLimitFatalError,
-              "MemoryAllocationFailed");
           module_info=AcquireModuleInfo((const char *) NULL,"[boot-strap]");
           module_info->stealth=MagickTrue;
           status=AddValueToSplayTree(splay_tree,module_info->tag,module_info);

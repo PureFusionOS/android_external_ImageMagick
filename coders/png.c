@@ -4475,7 +4475,7 @@ static Image *ReadOneJNGImage(MngInfo *mng_info,
 
     type[0]='\0';
     (void) ConcatenateMagickString(type,"errr",MagickPathExtent);
-    length=ReadBlobMSBLong(image);
+    length=(size_t) ReadBlobMSBLong(image);
     count=(unsigned int) ReadBlob(image,4,(unsigned char *) type);
 
     if (logging != MagickFalse)
@@ -4981,6 +4981,8 @@ static Image *ReadOneJNGImage(MngInfo *mng_info,
   {
     s=GetVirtualPixels(jng_image,0,y,image->columns,1,exception);
     q=GetAuthenticPixels(image,0,y,image->columns,1,exception);
+    if ((s == (const Quantum *)  NULL) || (q == (Quantum *) NULL))
+      break;
     for (x=(ssize_t) image->columns; x != 0; x--)
     {
       SetPixelRed(image,GetPixelRed(jng_image,s),q);
@@ -5023,9 +5025,10 @@ static Image *ReadOneJNGImage(MngInfo *mng_info,
       if (jng_image != (Image *) NULL)
         for (y=0; y < (ssize_t) image->rows; y++)
         {
-          s=GetVirtualPixels(jng_image,0,y,image->columns,1,
-            exception);
+          s=GetVirtualPixels(jng_image,0,y,image->columns,1,exception);
           q=GetAuthenticPixels(image,0,y,image->columns,1,exception);
+          if ((s == (const Quantum *)  NULL) || (q == (Quantum *) NULL))
+            break;
 
           if (image->alpha_trait != UndefinedPixelTrait)
             for (x=(ssize_t) image->columns; x != 0; x--)
@@ -5377,7 +5380,7 @@ static Image *ReadOneMNGImage(MngInfo* mng_info, const ImageInfo *image_info,
         */
         type[0]='\0';
         (void) ConcatenateMagickString(type,"errr",MagickPathExtent);
-        length=ReadBlobMSBLong(image);
+        length=(size_t) ReadBlobMSBLong(image);
         count=(size_t) ReadBlob(image,4,(unsigned char *) type);
 
         if (logging != MagickFalse)
@@ -6850,7 +6853,8 @@ static Image *ReadOneMNGImage(MngInfo* mng_info, const ImageInfo *image_info,
                      {
                        q=GetAuthenticPixels(image,0,y,image->columns,1,
                           exception);
-
+                       if (q == (Quantum *) NULL)
+                         break;
                        for (x=(ssize_t) image->columns-1; x >= 0; x--)
                        {
                           SetPixelRed(image,ScaleQuantumToShort(
@@ -6958,6 +6962,8 @@ static Image *ReadOneMNGImage(MngInfo* mng_info, const ImageInfo *image_info,
                     n=next;
                     q=GetAuthenticPixels(large_image,0,yy,large_image->columns,
                       1,exception);
+                    if (q == (Quantum *) NULL)
+                      break;
                     q+=(large_image->columns-image->columns)*
                       GetPixelChannels(large_image);
 
@@ -7108,6 +7114,8 @@ static Image *ReadOneMNGImage(MngInfo* mng_info, const ImageInfo *image_info,
                     *pixels;
 
                   q=GetAuthenticPixels(image,0,y,image->columns,1,exception);
+                  if (q == (Quantum *) NULL)
+                    break;
                   pixels=q+(image->columns-length)*GetPixelChannels(image);
                   n=pixels+GetPixelChannels(image);
 
@@ -7247,6 +7255,8 @@ static Image *ReadOneMNGImage(MngInfo* mng_info, const ImageInfo *image_info,
                    {
                      q=GetAuthenticPixels(image,0,y,image->columns,1,
                        exception);
+                     if (q == (Quantum *) NULL)
+                       break;
 
                      for (x=(ssize_t) image->columns-1; x >= 0; x--)
                      {
@@ -8415,8 +8425,6 @@ static MagickBooleanType WriteOnePNGImage(MngInfo *mng_info,
   if (image == (Image *) NULL)
     return(MagickFalse);
   image_info=(ImageInfo *) CloneImageInfo(IMimage_info);
-  if (image_info == (ImageInfo *) NULL)
-    ThrowWriterException(ResourceLimitError, "MemoryAllocationFailed");
 
   /* Define these outside of the following "if logging()" block so they will
    * show in debuggers.

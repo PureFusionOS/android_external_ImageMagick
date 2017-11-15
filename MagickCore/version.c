@@ -175,6 +175,9 @@ MagickExport const char *GetMagickDelegates(void)
 #if defined(MAGICKCORE_DPS_DELEGATE) || defined(MAGICKCORE_GS_DELEGATE) || defined(WIN32)
   "ps "
 #endif
+#if defined(MAGICKCORE_RAW_R_DELEGATE)
+  "raw "
+#endif
 #if defined(MAGICKCORE_RSVG_DELEGATE)
   "rsvg "
 #endif
@@ -600,4 +603,22 @@ MagickExport void ListMagickVersion(FILE *file)
   (void) FormatLocaleFile(file,"Features: %s\n",GetMagickFeatures());
   (void) FormatLocaleFile(file,"Delegates (built-in): %s\n",
     GetMagickDelegates());
+  if (IsEventLogging() != MagickFalse)
+    {
+      (void) FormatLocaleFile(file,"Wizard attributes: ");
+      (void) FormatLocaleFile(file,"QuantumRange=%g; ",(double) QuantumRange);
+      (void) FormatLocaleFile(file,"QuantumScale=%.*g; ",GetMagickPrecision(),
+        (double) QuantumScale);
+      (void) FormatLocaleFile(file,"MagickEpsilon=%.*g; ",GetMagickPrecision(),
+        (double) MagickEpsilon);
+      (void) FormatLocaleFile(file,"MaxMap=%g; ",(double) MaxMap);
+      (void) FormatLocaleFile(file,"MagickPathExtent=%g; ",
+        (double) MagickPathExtent);
+      (void) FormatLocaleFile(file,"sizeof(Quantum)=%g; ",(double)
+        sizeof(Quantum));
+      (void) FormatLocaleFile(file,"sizeof(MagickSizeType)=%g; ",(double)
+        sizeof(MagickSizeType));
+      (void) FormatLocaleFile(file,"sizeof(MagickOffsetType)=%g",(double)
+        sizeof(MagickOffsetType));
+    }
 }

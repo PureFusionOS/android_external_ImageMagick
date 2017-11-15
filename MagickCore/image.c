@@ -75,6 +75,7 @@
 #include "MagickCore/magick.h"
 #include "MagickCore/magick-private.h"
 #include "MagickCore/memory_.h"
+#include "MagickCore/memory-private.h"
 #include "MagickCore/module.h"
 #include "MagickCore/monitor.h"
 #include "MagickCore/monitor-private.h"
@@ -166,9 +167,7 @@ MagickExport Image *AcquireImage(const ImageInfo *image_info,
     Allocate image structure.
   */
   (void) LogMagickEvent(TraceEvent,GetMagickModule(),"...");
-  image=(Image *) AcquireMagickMemory(sizeof(*image));
-  if (image == (Image *) NULL)
-    ThrowFatalException(ResourceLimitFatalError,"MemoryAllocationFailed");
+  image=(Image *) AcquireCriticalMemory(sizeof(*image));
   (void) ResetMagickMemory(image,0,sizeof(*image));
   /*
     Initialize Image structure.
@@ -344,9 +343,7 @@ MagickExport ImageInfo *AcquireImageInfo(void)
   ImageInfo
     *image_info;
 
-  image_info=(ImageInfo *) AcquireMagickMemory(sizeof(*image_info));
-  if (image_info == (ImageInfo *) NULL)
-    ThrowFatalException(ResourceLimitFatalError,"MemoryAllocationFailed");
+  image_info=(ImageInfo *) AcquireCriticalMemory(sizeof(*image_info));
   GetImageInfo(image_info);
   return(image_info);
 }
@@ -552,7 +549,7 @@ MagickExport Image *AppendImages(const Image *images,
     image_view=AcquireVirtualCacheView(next,exception);
 #if defined(MAGICKCORE_OPENMP_SUPPORT)
     #pragma omp parallel for schedule(static,4) shared(status) \
-      magick_threads(next,next,next->rows,1)
+      magick_number_threads(next,next,next->rows,1)
 #endif
     for (y=0; y < (ssize_t) next->rows; y++)
     {
@@ -826,9 +823,7 @@ MagickExport Image *CloneImage(const Image *image,const size_t columns,
         "NegativeOrZeroImageSize","`%s'",image->filename);
       return((Image *) NULL);
     }
-  clone_image=(Image *) AcquireMagickMemory(sizeof(*clone_image));
-  if (clone_image == (Image *) NULL)
-    ThrowImageException(ResourceLimitError,"MemoryAllocationFailed");
+  clone_image=(Image *) AcquireCriticalMemory(sizeof(*clone_image));
   (void) ResetMagickMemory(clone_image,0,sizeof(*clone_image));
   clone_image->signature=MagickCoreSignature;
   clone_image->storage_class=image->storage_class;
@@ -959,19 +954,29 @@ MagickExport ImageInfo *CloneImageInfo(const ImageInfo *image_info)
   clone_info->scene=image_info->scene;
   clone_info->number_scenes=image_info->number_scenes;
   clone_info->depth=image_info->depth;
-  (void) CloneString(&clone_info->size,image_info->size);
-  (void) CloneString(&clone_info->extract,image_info->extract);
-  (void) CloneString(&clone_info->scenes,image_info->scenes);
-  (void) CloneString(&clone_info->page,image_info->page);
+  if (image_info->size != (char *) NULL)
+    (void) CloneString(&clone_info->size,image_info->size);
+  if (image_info->extract != (char *) NULL)
+    (void) CloneString(&clone_info->extract,image_info->extract);
+  if (image_info->scenes != (char *) NULL)
+    (void) CloneString(&clone_info->scenes,image_info->scenes);
+  if (image_info->page != (char *) NULL)
+    (void) CloneString(&clone_info->page,image_info->page);
   clone_info->interlace=image_info->interlace;
   clone_info->endian=image_info->endian;
   clone_info->units=image_info->units;
   clone_info->quality=image_info->quality;
-  (void) CloneString(&clone_info->sampling_factor,image_info->sampling_factor);
-  (void) CloneString(&clone_info->server_name,image_info->server_name);
-  (void) CloneString(&clone_info->font,image_info->font);
-  (void) CloneString(&clone_info->texture,image_info->texture);
-  (void) CloneString(&clone_info->density,image_info->density);
+  if (image_info->sampling_factor != (char *) NULL)
+    (void) CloneString(&clone_info->sampling_factor,
+      image_info->sampling_factor);
+  if (image_info->server_name != (char *) NULL)
+    (void) CloneString(&clone_info->server_name,image_info->server_name);
+  if (image_info->font != (char *) NULL)
+    (void) CloneString(&clone_info->font,image_info->font);
+  if (image_info->texture != (char *) NULL)
+    (void) CloneString(&clone_info->texture,image_info->texture);
+  if (image_info->density != (char *) NULL)
+    (void) CloneString(&clone_info->density,image_info->density);
   clone_info->pointsize=image_info->pointsize;
   clone_info->fuzz=image_info->fuzz;
   clone_info->matte_color=image_info->matte_color;
@@ -1084,7 +1089,7 @@ MagickExport MagickBooleanType CopyImagePixels(Image *image,
   image_view=AcquireAuthenticCacheView(image,exception);
 #if defined(MAGICKCORE_OPENMP_SUPPORT)
   #pragma omp parallel for schedule(static,4) shared(progress,status) \
-    magick_threads(image,source_image,geometry->height,1)
+    magick_number_threads(image,source_image,geometry->height,1)
 #endif
   for (y=0; y < (ssize_t) geometry->height; y++)
   {
@@ -1804,7 +1809,7 @@ MagickExport MagickBooleanType IsHighDynamicRangeImage(const Image *image,
   image_view=AcquireVirtualCacheView(image,exception);
 #if defined(MAGICKCORE_OPENMP_SUPPORT)
   #pragma omp parallel for schedule(static,4) shared(status) \
-    magick_threads(image,image,image->rows,1)
+    magick_number_threads(image,image,image->rows,1)
 #endif
   for (y=0; y < (ssize_t) image->rows; y++)
   {
@@ -2059,7 +2064,7 @@ MagickExport Image *NewMagickImage(const ImageInfo *image_info,
   image_view=AcquireAuthenticCacheView(image,exception);
 #if defined(MAGICKCORE_OPENMP_SUPPORT)
   #pragma omp parallel for schedule(static,4) shared(status) \
-    magick_threads(image,image,image->rows,1)
+    magick_number_threads(image,image,image->rows,1)
 #endif
   for (y=0; y < (ssize_t) image->rows; y++)
   {
@@ -2242,7 +2247,7 @@ MagickExport MagickBooleanType SetImageAlpha(Image *image,const Quantum alpha,
   image_view=AcquireAuthenticCacheView(image,exception);
 #if defined(MAGICKCORE_OPENMP_SUPPORT)
   #pragma omp parallel for schedule(static,4) shared(status) \
-    magick_threads(image,image,image->rows,1)
+    magick_number_threads(image,image,image->rows,1)
 #endif
   for (y=0; y < (ssize_t) image->rows; y++)
   {
@@ -2442,7 +2447,7 @@ MagickExport MagickBooleanType SetImageColor(Image *image,
   image_view=AcquireAuthenticCacheView(image,exception);
 #if defined(MAGICKCORE_OPENMP_SUPPORT)
   #pragma omp parallel for schedule(static,4) shared(status) \
-    magick_threads(image,image,image->rows,1)
+    magick_number_threads(image,image,image->rows,1)
 #endif
   for (y=0; y < (ssize_t) image->rows; y++)
   {
@@ -3106,7 +3111,7 @@ MagickExport MagickBooleanType SetImageMask(Image *image,const PixelMask type,
   image_view=AcquireAuthenticCacheView(image,exception);
 #if defined(MAGICKCORE_OPENMP_SUPPORT)
   #pragma omp parallel for schedule(static,4) shared(status) \
-    magick_threads(mask,image,1,1)
+    magick_number_threads(mask,image,image->rows,1)
 #endif
   for (y=0; y < (ssize_t) image->rows; y++)
   {
@@ -3133,7 +3138,7 @@ MagickExport MagickBooleanType SetImageMask(Image *image,const PixelMask type,
       MagickRealType
         intensity;
 
-      intensity=0;
+      intensity=0.0;
       if ((x < (ssize_t) mask->columns) && (y < (ssize_t) mask->rows))
         intensity=GetPixelIntensity(mask,p);
       switch (type)
@@ -3229,7 +3234,7 @@ MagickExport MagickBooleanType SetImageRegionMask(Image *image,
   image_view=AcquireAuthenticCacheView(image,exception);
 #if defined(MAGICKCORE_OPENMP_SUPPORT)
   #pragma omp parallel for schedule(static,4) shared(status) \
-    magick_threads(image,image,1,1)
+    magick_number_threads(image,image,image->rows,1)
 #endif
   for (y=0; y < (ssize_t) image->rows; y++)
   {
@@ -3252,7 +3257,7 @@ MagickExport MagickBooleanType SetImageRegionMask(Image *image,
       Quantum
         pixel;
 
-      pixel=0;
+      pixel=(Quantum) 0;
       if (((x >= region->x) && (x < (region->x+(ssize_t) region->width))) &&
           ((y >= region->y) && (y < (region->y+(ssize_t) region->height))))
         pixel=QuantumRange;
@@ -3726,7 +3731,7 @@ MagickExport MagickBooleanType SyncImage(Image *image,ExceptionInfo *exception)
   image_view=AcquireAuthenticCacheView(image,exception);
 #if defined(MAGICKCORE_OPENMP_SUPPORT)
   #pragma omp parallel for schedule(static,4) shared(range_exception,status) \
-    magick_threads(image,image,image->rows,1)
+    magick_number_threads(image,image,image->rows,1)
 #endif
   for (y=0; y < (ssize_t) image->rows; y++)
   {

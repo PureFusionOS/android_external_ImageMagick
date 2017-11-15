@@ -171,8 +171,7 @@ static inline MagickOffsetType WriteMatrixElements(
 }
 
 static MagickBooleanType SetMatrixExtent(
-  MatrixInfo *magick_restrict matrix_info,
-  MagickSizeType length)
+  MatrixInfo *magick_restrict matrix_info,MagickSizeType length)
 {
   MagickOffsetType
     count,
@@ -264,7 +263,6 @@ MagickExport MatrixInfo *AcquireMatrixInfo(const size_t columns,
           return(DestroyMatrixInfo(matrix_info));
         }
       matrix_info->type=DiskCache;
-      (void) AcquireMagickResource(MemoryResource,matrix_info->length);
       matrix_info->file=AcquireUniqueFileResource(matrix_info->path);
       if (matrix_info->file == -1)
         return(DestroyMatrixInfo(matrix_info));
@@ -273,14 +271,12 @@ MagickExport MatrixInfo *AcquireMatrixInfo(const size_t columns,
         {
           status=SetMatrixExtent(matrix_info,matrix_info->length);
           if (status != MagickFalse)
-            {
-              matrix_info->elements=(void *) MapBlob(matrix_info->file,IOMode,0,
-                (size_t) matrix_info->length);
-              if (matrix_info->elements != NULL)
-                matrix_info->type=MapCache;
-              else
-                RelinquishMagickResource(MapResource,matrix_info->length);
-            }
+            matrix_info->elements=(void *) MapBlob(matrix_info->file,IOMode,0,
+              (size_t) matrix_info->length);
+          if (matrix_info->elements != NULL)
+            matrix_info->type=MapCache;
+          else
+            RelinquishMagickResource(MapResource,matrix_info->length);
         }
     }
   return(matrix_info);
@@ -943,7 +939,7 @@ MagickExport Image *MatrixToImage(const MatrixInfo *matrix_info,
   image_view=AcquireAuthenticCacheView(image,exception);
 #if defined(MAGICKCORE_OPENMP_SUPPORT)
   #pragma omp parallel for schedule(static,4) shared(status) \
-    magick_threads(image,image,image->rows,1)
+    magick_number_threads(image,image,image->rows,1)
 #endif
   for (y=0; y < (ssize_t) image->rows; y++)
   {

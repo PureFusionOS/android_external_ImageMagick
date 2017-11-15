@@ -189,9 +189,7 @@ MagickPrivate Cache AcquirePixelCache(const size_t number_threads)
   char
     *value;
 
-  cache_info=(CacheInfo *) AcquireQuantumMemory(1,sizeof(*cache_info));
-  if (cache_info == (CacheInfo *) NULL)
-    ThrowFatalException(ResourceLimitFatalError,"MemoryAllocationFailed");
+  cache_info=(CacheInfo *) AcquireCriticalMemory(sizeof(*cache_info));
   (void) ResetMagickMemory(cache_info,0,sizeof(*cache_info));
   cache_info->type=UndefinedCache;
   cache_info->mode=IOMode;
@@ -538,13 +536,15 @@ static MagickBooleanType ClonePixelCacheRepository(
   CacheInfo *magick_restrict clone_info,CacheInfo *magick_restrict cache_info,
   ExceptionInfo *exception)
 {
-#define MaxCacheThreads  2
-#define cache_threads(source,destination) \
-  num_threads(((source)->type == DiskCache) || \
-    ((destination)->type == DiskCache) || (((source)->rows) < \
-    (16*GetMagickResourceLimit(ThreadResource))) ? 1 : \
-    GetMagickResourceLimit(ThreadResource) < MaxCacheThreads ? \
-    GetMagickResourceLimit(ThreadResource) : MaxCacheThreads)
+#define MaxCacheThreads  GetMagickResourceLimit(ThreadResource)
+#define cache_number_threads(source,destination,chunk,multithreaded) \
+  num_threads((multithreaded) == 0 ? 1 : \
+    (((source)->type != MemoryCache) && \
+     ((source)->type != MapCache)) || \
+    (((destination)->type != MemoryCache) && \
+     ((destination)->type != MapCache)) ? \
+    MagickMax(MagickMin(GetMagickResourceLimit(ThreadResource),2),1) : \
+    MagickMax(MagickMin((ssize_t) GetMagickResourceLimit(ThreadResource),(ssize_t) (chunk)/256),1))
 
   MagickBooleanType
     optimize,
@@ -581,7 +581,7 @@ static MagickBooleanType ClonePixelCacheRepository(
            (clone_info->type == MapCache)))
         {
           (void) memcpy(clone_info->pixels,cache_info->pixels,
-            cache_info->columns*cache_info->number_channels*cache_info->rows*
+            cache_info->number_channels*cache_info->columns*cache_info->rows*
             sizeof(*cache_info->pixels));
           if ((cache_info->metacontent_extent != 0) &&
               (clone_info->metacontent_extent != 0))
@@ -605,12 +605,12 @@ static MagickBooleanType ClonePixelCacheRepository(
   optimize=(cache_info->number_channels == clone_info->number_channels) &&
     (memcmp(cache_info->channel_map,clone_info->channel_map,length) == 0) ?
     MagickTrue : MagickFalse;
-  length=(size_t) MagickMin(cache_info->columns*cache_info->number_channels,
-    clone_info->columns*clone_info->number_channels);
+  length=(size_t) MagickMin(cache_info->number_channels*cache_info->columns,
+    clone_info->number_channels*clone_info->columns);
   status=MagickTrue;
 #if defined(MAGICKCORE_OPENMP_SUPPORT)
   #pragma omp parallel for schedule(static,4) shared(status) \
-    cache_threads(cache_info,clone_info)
+    cache_number_threads(cache_info,clone_info,cache_info->rows,1)
 #endif
   for (y=0; y < (ssize_t) cache_info->rows; y++)
   {
@@ -700,7 +700,7 @@ static MagickBooleanType ClonePixelCacheRepository(
         clone_info->metacontent_extent);
 #if defined(MAGICKCORE_OPENMP_SUPPORT)
       #pragma omp parallel for schedule(static,4) shared(status) \
-        cache_threads(cache_info,clone_info)
+        cache_number_threads(cache_info,clone_info,cache_info->rows,1)
 #endif
       for (y=0; y < (ssize_t) cache_info->rows; y++)
       {
@@ -1156,9 +1156,6 @@ MagickPrivate cl_mem GetAuthenticOpenCLBuffer(const Image *image,
   CacheInfo
     *magick_restrict cache_info;
 
-  cl_int
-    status;
-
   assert(image != (const Image *) NULL);
   assert(device != (const MagickCLDevice) NULL);
   cache_info=(CacheInfo *) image->cache;
@@ -1166,6 +1163,7 @@ MagickPrivate cl_mem GetAuthenticOpenCLBuffer(const Image *image,
     SyncImagePixelCache((Image *) image,exception);
   if ((cache_info->type != MemoryCache) || (cache_info->mapped != MagickFalse))
     return((cl_mem) NULL);
+  LockSemaphoreInfo(cache_info->semaphore);
   if ((cache_info->opencl != (MagickCLCacheInfo) NULL) &&
       (cache_info->opencl->device->context != device->context))
     cache_info->opencl=CopyMagickCLCacheInfo(cache_info->opencl);
@@ -1174,9 +1172,12 @@ MagickPrivate cl_mem GetAuthenticOpenCLBuffer(const Image *image,
       assert(cache_info->pixels != (Quantum *) NULL);
       cache_info->opencl=AcquireMagickCLCacheInfo(device,cache_info->pixels,
         cache_info->length);
-      if (cache_info->opencl == (MagickCLCacheInfo) NULL)
-        return((cl_mem) NULL);
     }
+  if (cache_info->opencl != (MagickCLCacheInfo) NULL)
+    RetainOpenCLMemObject(cache_info->opencl->buffer);
+  UnlockSemaphoreInfo(cache_info->semaphore);
+  if (cache_info->opencl == (MagickCLCacheInfo) NULL)
+    return((cl_mem) NULL);
   assert(cache_info->opencl->pixels == cache_info->pixels);
   return(cache_info->opencl->buffer);
 }
@@ -3828,7 +3829,7 @@ MagickExport MagickBooleanType PersistPixelCache(Image *image,
       if (OpenPixelCache(image,ReadMode,exception) == MagickFalse)
         return(MagickFalse);
       *offset+=cache_info->length+page_size-(cache_info->length % page_size);
-      return(MagickTrue);
+      return(SyncImagePixelCache(image,exception));
     }
   /*
     Clone persistent pixel cache.
@@ -3842,8 +3843,8 @@ MagickExport MagickBooleanType PersistPixelCache(Image *image,
   clone_info->alpha_trait=cache_info->alpha_trait;
   clone_info->read_mask=cache_info->read_mask;
   clone_info->write_mask=cache_info->write_mask;
-  clone_info->rows=cache_info->rows;
   clone_info->columns=cache_info->columns;
+  clone_info->rows=cache_info->rows;
   clone_info->number_channels=cache_info->number_channels;
   clone_info->metacontent_extent=cache_info->metacontent_extent;
   clone_info->mode=PersistMode;
@@ -4910,7 +4911,7 @@ static MagickBooleanType SetCacheAlphaChannel(Image *image,const Quantum alpha,
   image_view=AcquireVirtualCacheView(image,exception);  /* must be virtual */
 #if defined(MAGICKCORE_OPENMP_SUPPORT)
   #pragma omp parallel for schedule(static,4) shared(status) \
-    magick_threads(image,image,1,1)
+    magick_number_threads(image,image,image->rows,1)
 #endif
   for (y=0; y < (ssize_t) image->rows; y++)
   {
@@ -5018,8 +5019,7 @@ static void CopyOpenCLBuffer(CacheInfo *magick_restrict cache_info)
     Ensure single threaded access to OpenCL environment.
   */
   LockSemaphoreInfo(cache_info->semaphore);
-  cache_info->opencl=(MagickCLCacheInfo) CopyMagickCLCacheInfo(
-    cache_info->opencl);
+  cache_info->opencl=CopyMagickCLCacheInfo(cache_info->opencl);
   UnlockSemaphoreInfo(cache_info->semaphore);
 }
 
@@ -5495,7 +5495,7 @@ static MagickBooleanType WritePixelCachePixels(
       {
         (void) memcpy(q,p,(size_t) length);
         p+=cache_info->number_channels*nexus_info->region.width;
-        q+=cache_info->columns*cache_info->number_channels;
+        q+=cache_info->number_channels*cache_info->columns;
       }
       break;
     }

@@ -68,6 +68,7 @@
 #include "MagickCore/image-private.h"
 #include "MagickCore/list.h"
 #include "MagickCore/log.h"
+#include "MagickCore/memory-private.h"
 #include "MagickCore/monitor.h"
 #include "MagickCore/monitor-private.h"
 #include "MagickCore/option.h"
@@ -206,9 +207,7 @@ MagickExport DrawInfo *AcquireDrawInfo(void)
   DrawInfo
     *draw_info;
 
-  draw_info=(DrawInfo *) AcquireMagickMemory(sizeof(*draw_info));
-  if (draw_info == (DrawInfo *) NULL)
-    ThrowFatalException(ResourceLimitFatalError,"MemoryAllocationFailed");
+  draw_info=(DrawInfo *) AcquireCriticalMemory(sizeof(*draw_info));
   GetDrawInfo((ImageInfo *) NULL,draw_info);
   return(draw_info);
 }
@@ -249,9 +248,7 @@ MagickExport DrawInfo *CloneDrawInfo(const ImageInfo *image_info,
   ExceptionInfo
     *exception;
 
-  clone_info=(DrawInfo *) AcquireMagickMemory(sizeof(*clone_info));
-  if (clone_info == (DrawInfo *) NULL)
-    ThrowFatalException(ResourceLimitFatalError,"MemoryAllocationFailed");
+  clone_info=(DrawInfo *) AcquireCriticalMemory(sizeof(*clone_info));
   GetDrawInfo(image_info,clone_info);
   if (draw_info == (DrawInfo *) NULL)
     return(clone_info);
@@ -1163,7 +1160,7 @@ MagickExport MagickBooleanType DrawAffineImage(Image *image,
   image_view=AcquireAuthenticCacheView(image,exception);
 #if defined(MAGICKCORE_OPENMP_SUPPORT)
   #pragma omp parallel for schedule(static,4) shared(status) \
-    magick_threads(source,image,1,1)
+    magick_number_threads(source,image,stop-start,1)
 #endif
   for (y=start; y <= stop; y++)
   {
@@ -2325,8 +2322,11 @@ MagickExport MagickBooleanType DrawImage(Image *image,const DrawInfo *draw_info,
                     continue;
                   break;
                 }
-                (void) CopyMagickString(token,p,(size_t) (q-p-4+1));
-                (void) SetImageArtifact(image,name,token);
+                if ((size_t) (q-p-4+1) > 0)
+                  {
+                    (void) CopyMagickString(token,p,(size_t) (q-p-4+1));
+                    (void) SetImageArtifact(image,name,token);
+                  }
                 GetNextToken(q,&q,extent,token);
                 break;
               }
@@ -2382,31 +2382,35 @@ MagickExport MagickBooleanType DrawImage(Image *image,const DrawInfo *draw_info,
                     continue;
                   break;
                 }
-                (void) CopyMagickString(token,p,(size_t) (q-p-4+1));
-                bounds.x1=graphic_context[n]->affine.sx*segment.x1+
-                  graphic_context[n]->affine.ry*segment.y1+
-                  graphic_context[n]->affine.tx;
-                bounds.y1=graphic_context[n]->affine.rx*segment.x1+
-                  graphic_context[n]->affine.sy*segment.y1+
-                  graphic_context[n]->affine.ty;
-                bounds.x2=graphic_context[n]->affine.sx*segment.x2+
-                  graphic_context[n]->affine.ry*segment.y2+
-                  graphic_context[n]->affine.tx;
-                bounds.y2=graphic_context[n]->affine.rx*segment.x2+
-                  graphic_context[n]->affine.sy*segment.y2+
-                  graphic_context[n]->affine.ty;
-                (void) FormatLocaleString(key,MagickPathExtent,"%s",name);
-                (void) SetImageArtifact(image,key,token);
-                (void) FormatLocaleString(key,MagickPathExtent,"%s-type",name);
-                (void) SetImageArtifact(image,key,type);
-                (void) FormatLocaleString(key,MagickPathExtent,"%s-geometry",
-                  name);
-                (void) FormatLocaleString(geometry,MagickPathExtent,
-                  "%gx%g%+.15g%+.15g",
-                  MagickMax(fabs(bounds.x2-bounds.x1+1.0),1.0),
-                  MagickMax(fabs(bounds.y2-bounds.y1+1.0),1.0),
-                  bounds.x1,bounds.y1);
-                (void) SetImageArtifact(image,key,geometry);
+                if ((size_t) (q-p-4+1) > 0)
+                  {
+                    (void) CopyMagickString(token,p,(size_t) (q-p-4+1));
+                    bounds.x1=graphic_context[n]->affine.sx*segment.x1+
+                      graphic_context[n]->affine.ry*segment.y1+
+                      graphic_context[n]->affine.tx;
+                    bounds.y1=graphic_context[n]->affine.rx*segment.x1+
+                      graphic_context[n]->affine.sy*segment.y1+
+                      graphic_context[n]->affine.ty;
+                    bounds.x2=graphic_context[n]->affine.sx*segment.x2+
+                      graphic_context[n]->affine.ry*segment.y2+
+                      graphic_context[n]->affine.tx;
+                    bounds.y2=graphic_context[n]->affine.rx*segment.x2+
+                      graphic_context[n]->affine.sy*segment.y2+
+                      graphic_context[n]->affine.ty;
+                    (void) FormatLocaleString(key,MagickPathExtent,"%s",name);
+                    (void) SetImageArtifact(image,key,token);
+                    (void) FormatLocaleString(key,MagickPathExtent,"%s-type",
+                      name);
+                    (void) SetImageArtifact(image,key,type);
+                    (void) FormatLocaleString(key,MagickPathExtent,
+                      "%s-geometry",name);
+                    (void) FormatLocaleString(geometry,MagickPathExtent,
+                      "%gx%g%+.15g%+.15g",
+                      MagickMax(fabs(bounds.x2-bounds.x1+1.0),1.0),
+                      MagickMax(fabs(bounds.y2-bounds.y1+1.0),1.0),
+                      bounds.x1,bounds.y1);
+                    (void) SetImageArtifact(image,key,geometry);
+                  }
                 GetNextToken(q,&q,extent,token);
                 break;
               }
@@ -2457,16 +2461,19 @@ MagickExport MagickBooleanType DrawImage(Image *image,const DrawInfo *draw_info,
                     continue;
                   break;
                 }
-                (void) CopyMagickString(token,p,(size_t) (q-p-4+1));
-                (void) FormatLocaleString(key,MagickPathExtent,"%s",name);
-                (void) SetImageArtifact(image,key,token);
-                (void) FormatLocaleString(key,MagickPathExtent,"%s-geometry",
-                  name);
-                (void) FormatLocaleString(geometry,MagickPathExtent,
-                  "%.20gx%.20g%+.20g%+.20g",(double)pattern_bounds.width,
-                  (double)pattern_bounds.height,(double)pattern_bounds.x,
-                  (double)pattern_bounds.y);
-                (void) SetImageArtifact(image,key,geometry);
+                if ((size_t) (q-p-4+1) > 0)
+                  {
+                    (void) CopyMagickString(token,p,(size_t) (q-p-4+1));
+                    (void) FormatLocaleString(key,MagickPathExtent,"%s",name);
+                    (void) SetImageArtifact(image,key,token);
+                    (void) FormatLocaleString(key,MagickPathExtent,
+                      "%s-geometry",name);
+                    (void) FormatLocaleString(geometry,MagickPathExtent,
+                      "%.20gx%.20g%+.20g%+.20g",(double)pattern_bounds.width,
+                      (double)pattern_bounds.height,(double)pattern_bounds.x,
+                      (double)pattern_bounds.y);
+                    (void) SetImageArtifact(image,key,geometry);
+                  }
                 GetNextToken(q,&q,extent,token);
                 break;
               }
@@ -3426,7 +3433,7 @@ MagickExport MagickBooleanType DrawGradientImage(Image *image,
   image_view=AcquireAuthenticCacheView(image,exception);
 #if defined(MAGICKCORE_OPENMP_SUPPORT)
   #pragma omp parallel for schedule(static,4) shared(status) \
-    magick_threads(image,image,1,1)
+    magick_number_threads(image,image,bounding_box.height-bounding_box.y,1)
 #endif
   for (y=bounding_box.y; y < (ssize_t) bounding_box.height; y++)
   {
@@ -4042,7 +4049,7 @@ RestoreMSCWarning
       stop_y=(ssize_t) floor(bounds.y2+0.5);
 #if defined(MAGICKCORE_OPENMP_SUPPORT)
       #pragma omp parallel for schedule(static,4) shared(status) \
-        magick_threads(image,image,1,1)
+        magick_number_threads(image,image,stop_y-start_y+1,1)
 #endif
       for (y=start_y; y <= stop_y; y++)
       {
@@ -4105,7 +4112,7 @@ RestoreMSCWarning
   stop_y=(ssize_t) floor(bounds.y2+0.5);
 #if defined(MAGICKCORE_OPENMP_SUPPORT)
   #pragma omp parallel for schedule(static,4) shared(status) \
-    magick_threads(image,image,1,1)
+    magick_number_threads(image,image,stop_y-start_y+1,1)
 #endif
   for (y=start_y; y <= stop_y; y++)
   {

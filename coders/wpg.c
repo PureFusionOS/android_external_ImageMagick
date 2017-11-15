@@ -264,8 +264,8 @@ static void Rd_WP_DWORD(Image *image,size_t *d)
   return;
 }
 
-static void InsertRow(Image *image,unsigned char *p,ssize_t y,int bpp,
-  ExceptionInfo *exception)
+static MagickBooleanType InsertRow(Image *image,unsigned char *p,ssize_t y,
+  int bpp,ExceptionInfo *exception)
 {
   int
     bit;
@@ -279,13 +279,13 @@ static void InsertRow(Image *image,unsigned char *p,ssize_t y,int bpp,
   ssize_t
     x;
 
+  q=QueueAuthenticPixels(image,0,y,image->columns,1,exception);
+  if (q == (Quantum *) NULL)
+    return(MagickFalse);
   switch (bpp)
     {
     case 1:  /* Convert bitmap scanline. */
       {
-        q=QueueAuthenticPixels(image,0,y,image->columns,1,exception);
-        if (q == (Quantum *) NULL)
-          break;
         for (x=0; x < ((ssize_t) image->columns-7); x+=8)
         {
           for (bit=0; bit < 8; bit++)
@@ -308,15 +308,10 @@ static void InsertRow(Image *image,unsigned char *p,ssize_t y,int bpp,
             }
             p++;
           }
-        if (!SyncAuthenticPixels(image,exception))
-          break;
         break;
       }
     case 2:  /* Convert PseudoColor scanline. */
       {
-        q=QueueAuthenticPixels(image,0,y,image->columns,1,exception);
-        if (q == (Quantum *) NULL)
-          break;
         for (x=0; x < ((ssize_t) image->columns-3); x+=4)
         {
             index=ConstrainColormapIndex(image,(*p >> 6) & 0x3,exception);
@@ -360,16 +355,11 @@ static void InsertRow(Image *image,unsigned char *p,ssize_t y,int bpp,
               }
             p++;
           }
-        if (SyncAuthenticPixels(image,exception) == MagickFalse)
-          break;
         break;
       }
  
     case 4:  /* Convert PseudoColor scanline. */
       {
-        q=QueueAuthenticPixels(image,0,y,image->columns,1,exception);
-        if (q == (Quantum *) NULL)
-          break;
         for (x=0; x < ((ssize_t) image->columns-1); x+=2)
           { 
             index=ConstrainColormapIndex(image,(*p >> 4) & 0x0f,exception);
@@ -390,15 +380,10 @@ static void InsertRow(Image *image,unsigned char *p,ssize_t y,int bpp,
             p++;
             q+=GetPixelChannels(image);
           }
-        if (SyncAuthenticPixels(image,exception) == MagickFalse)
-          break;
         break;
       }
     case 8: /* Convert PseudoColor scanline. */
       {
-        q=QueueAuthenticPixels(image,0,y,image->columns,1,exception);
-        if (q == (Quantum *) NULL) break;
-
         for (x=0; x < (ssize_t) image->columns; x++)
           {
             index=ConstrainColormapIndex(image,*p,exception);
@@ -407,15 +392,10 @@ static void InsertRow(Image *image,unsigned char *p,ssize_t y,int bpp,
             p++;
             q+=GetPixelChannels(image);
           }
-        if (SyncAuthenticPixels(image,exception) == MagickFalse)
-          break;
       }
       break;
      
     case 24:     /*  Convert DirectColor scanline.  */
-      q=QueueAuthenticPixels(image,0,y,image->columns,1,exception);
-      if (q == (Quantum *) NULL)
-        break;
       for (x=0; x < (ssize_t) image->columns; x++)
         {
           SetPixelRed(image,ScaleCharToQuantum(*p++),q);
@@ -423,10 +403,11 @@ static void InsertRow(Image *image,unsigned char *p,ssize_t y,int bpp,
           SetPixelBlue(image,ScaleCharToQuantum(*p++),q);
           q+=GetPixelChannels(image);
         }
-      if (!SyncAuthenticPixels(image,exception))
-        break;
       break;
     }
+  if (!SyncAuthenticPixels(image,exception))
+    return(MagickFalse);
+  return(MagickTrue);
 }
 
 
@@ -437,10 +418,10 @@ static void InsertRow(Image *image,unsigned char *p,ssize_t y,int bpp,
   x++; \
   if((ssize_t) x>=ldblk) \
   { \
-    InsertRow(image,BImgBuff,(ssize_t) y,bpp,exception); \
+    if (InsertRow(image,BImgBuff,(ssize_t) y,bpp,exception) != MagickFalse) \
+      y++; \
     x=0; \
-    y++; \
-    } \
+  } \
 }
 /* WPG1 raster reader. */
 static int UnpackWPGRaster(Image *image,int bpp,ExceptionInfo *exception)
@@ -520,7 +501,11 @@ static int UnpackWPGRaster(Image *image,int bpp,ExceptionInfo *exception)
                   BImgBuff=(unsigned char *) RelinquishMagickMemory(BImgBuff);
                   return(-4);
                 }
-              InsertRow(image,BImgBuff,y-1,bpp,exception);
+              if (InsertRow(image,BImgBuff,y-1,bpp,exception) == MagickFalse)
+                {
+                  BImgBuff=(unsigned char *) RelinquishMagickMemory(BImgBuff);
+                  return(-5);
+                }
             }
         }
       }
@@ -544,9 +529,9 @@ RestoreMSCWarning \
   x++; \
   if((ssize_t) x >= ldblk) \
   { \
-    InsertRow(image,BImgBuff,(ssize_t) y,bpp,exception); \
+    if (InsertRow(image,BImgBuff,(ssize_t) y,bpp,exception) != MagickFalse) \
+      y++; \
     x=0; \
-    y++; \
    } \
 }
 /* WPG2 raster reader. */
@@ -636,11 +621,10 @@ static int UnpackWPG2Raster(Image *image,int bpp,ExceptionInfo *exception)
           {
             /* duplicate the previous row RunCount x */
             for(i=0;i<=RunCount;i++)
-              {      
-                InsertRow(image,BImgBuff,(ssize_t) (image->rows >= y ? y : image->rows-1),
-                          bpp,exception);
-                y++;
-              }    
+              {
+                if (InsertRow(image,BImgBuff,(ssize_t) (image->rows > y ? y : image->rows-1),bpp,exception) != MagickFalse)
+                  y++;
+              }
           }
           break;
         case 0xFF:
@@ -1069,7 +1053,9 @@ static Image *ReadWPGImage(const ImageInfo *image_info,
               WPG_Palette.StartIndex=ReadBlobLSBShort(image);
               WPG_Palette.NumOfEntries=ReadBlobLSBShort(image);
               if ((WPG_Palette.NumOfEntries-WPG_Palette.StartIndex) >
-                  (Rec2.RecordLength-2-2) / 3)
+                  (Rec2.RecordLength-2-2)/3)
+                ThrowReaderException(CorruptImageError,"InvalidColormapIndex");
+              if (WPG_Palette.StartIndex > WPG_Palette.NumOfEntries)
                 ThrowReaderException(CorruptImageError,"InvalidColormapIndex");
               image->colors=WPG_Palette.NumOfEntries;
               if (!AcquireImageColormap(image,image->colors,exception))
@@ -1127,7 +1113,7 @@ static Image *ReadWPGImage(const ImageInfo *image_info,
               status=SetImageExtent(image,image->columns,image->rows,exception);
               if (status == MagickFalse)
                 break;
-              if ((image->colors == 0) && (bpp <= 16))
+              if ((image->storage_class != PseudoClass) && (bpp != 24))
                 {
                   image->colors=one << bpp;
                   if (!AcquireImageColormap(image,image->colors,exception))
@@ -1348,11 +1334,16 @@ static Image *ReadWPGImage(const ImageInfo *image_info,
                     if (BImgBuff == (unsigned char *) NULL)
                       goto NoMemory;
 
-                    for(i=0; i< (ssize_t) image->rows; i++)
-                      {
-                        (void) ReadBlob(image,ldblk,BImgBuff);
-                        InsertRow(image,BImgBuff,i,bpp,exception);
-                      }
+                    for (i=0; i< (ssize_t) image->rows; i++)
+                    {
+                      (void) ReadBlob(image,ldblk,BImgBuff);
+                      if (InsertRow(image,BImgBuff,i,bpp,exception) == MagickFalse)
+                        {
+                          if(BImgBuff)
+                            BImgBuff=(unsigned char *) RelinquishMagickMemory(BImgBuff);
+                          goto DecompressionFailed;
+                        }
+                    }
 
                     if(BImgBuff)
                       BImgBuff=(unsigned char *) RelinquishMagickMemory(BImgBuff);

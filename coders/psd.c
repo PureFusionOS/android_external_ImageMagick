@@ -319,7 +319,7 @@ static MagickBooleanType CorrectPSDAlphaBlend(const ImageInfo *image_info,
   status=MagickTrue;
 #if defined(MAGICKCORE_OPENMP_SUPPORT)
 #pragma omp parallel for schedule(static,4) shared(status) \
-  magick_threads(image,image,image->rows,1)
+  magick_number_threads(image,image,image->rows,1)
 #endif
   for (y=0; y < (ssize_t) image->rows; y++)
   {
@@ -397,7 +397,7 @@ static MagickBooleanType ApplyPSDLayerOpacity(Image *image,Quantum opacity,
   status=MagickTrue;
 #if defined(MAGICKCORE_OPENMP_SUPPORT)
 #pragma omp parallel for schedule(static,4) shared(status) \
-  magick_threads(image,image,image->rows,1)
+  magick_number_threads(image,image,image->rows,1)
 #endif
   for (y=0; y < (ssize_t) image->rows; y++)
   {
@@ -468,7 +468,7 @@ static MagickBooleanType ApplyPSDOpacityMask(Image *image,const Image *mask,
   image->alpha_trait=BlendPixelTrait;
 #if defined(MAGICKCORE_OPENMP_SUPPORT)
 #pragma omp parallel for schedule(static,4) shared(status) \
-  magick_threads(image,image,image->rows,1)
+  magick_number_threads(image,image,image->rows,1)
 #endif
   for (y=0; y < (ssize_t) image->rows; y++)
   {
@@ -1151,7 +1151,7 @@ static MagickBooleanType ReadPSDChannelRLE(Image *image,const PSDInfo *psd_info,
     if ((MagickOffsetType) length < sizes[y])
       length=(size_t) sizes[y];
 
-  if (length > row_size + 256) // arbitrary number
+  if (length > (row_size+512)) // arbitrary number
     {
       pixels=(unsigned char *) RelinquishMagickMemory(pixels);
       ThrowBinaryException(ResourceLimitError,"InvalidLength",image->filename);
@@ -2030,6 +2030,8 @@ static Image *ReadPSDImage(const ImageInfo *image_info,ExceptionInfo *exception)
       (double) psd_info.columns,(double) psd_info.rows,(double)
       psd_info.channels,(double) psd_info.depth,ModeToString((PSDImageType)
       psd_info.mode));
+  if (EOFBlob(image) != MagickFalse)
+    ThrowReaderException(CorruptImageError,"ImproperImageHeader");
   /*
     Initialize image.
   */
@@ -2191,6 +2193,8 @@ static Image *ReadPSDImage(const ImageInfo *image_info,ExceptionInfo *exception)
   /*
     If we are only "pinging" the image, then we're done - so return.
   */
+  if (EOFBlob(image) != MagickFalse)
+    ThrowReaderException(CorruptImageError,"UnexpectedEndOfFile");
   if (image_info->ping != MagickFalse)
     {
       (void) CloseBlob(image);

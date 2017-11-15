@@ -442,6 +442,21 @@ static size_t StringSignature(const char* string)
   return(signature);
 }
 
+static void DestroyMagickCLCacheInfo(MagickCLCacheInfo info)
+{
+  ssize_t
+    i;
+
+  for (i=0; i < (ssize_t) info->event_count; i++)
+    openCL_library->clReleaseEvent(info->events[i]);
+  info->events=(cl_event *) RelinquishMagickMemory(info->events);
+  if (info->buffer != (cl_mem) NULL)
+    openCL_library->clReleaseMemObject(info->buffer);
+  RelinquishSemaphoreInfo(&info->events_semaphore);
+  ReleaseOpenCLDevice(info->device);
+  RelinquishMagickMemory(info);
+}
+
 /*
   Provide call to OpenCL library methods
 */
@@ -461,6 +476,11 @@ MagickPrivate void ReleaseOpenCLKernel(cl_kernel kernel)
 MagickPrivate void ReleaseOpenCLMemObject(cl_mem memobj)
 {
   (void) openCL_library->clReleaseMemObject(memobj);
+}
+
+MagickPrivate void RetainOpenCLMemObject(cl_mem memobj)
+{
+  (void) openCL_library->clRetainMemObject(memobj);
 }
 
 MagickPrivate cl_int SetOpenCLKernelArg(cl_kernel kernel,size_t arg_index,
@@ -507,9 +527,7 @@ MagickPrivate MagickCLCacheInfo AcquireMagickCLCacheInfo(MagickCLDevice device,
   MagickCLCacheInfo
     info;
 
-  info=(MagickCLCacheInfo) AcquireMagickMemory(sizeof(*info));
-  if (info == (MagickCLCacheInfo) NULL)
-    ThrowFatalException(ResourceLimitFatalError,"MemoryAllocationFailed");
+  info=(MagickCLCacheInfo) AcquireCriticalMemory(sizeof(*info));
   (void) ResetMagickMemory(info,0,sizeof(*info));
   LockSemaphoreInfo(openCL_lock);
   device->requested++;
@@ -523,10 +541,8 @@ MagickPrivate MagickCLCacheInfo AcquireMagickCLCacheInfo(MagickCLDevice device,
     &status);
   if (status == CL_SUCCESS)
     return(info);
-  LockSemaphoreInfo(openCL_lock);
-  device->requested--;
-  UnlockSemaphoreInfo(openCL_lock);
-  return((MagickCLCacheInfo) RelinquishMagickMemory(info));
+  DestroyMagickCLCacheInfo(info);
+  return((MagickCLCacheInfo) NULL);
 }
 
 /*
@@ -1619,10 +1635,16 @@ MagickPrivate void DumpOpenCLProfileData()
 %
 */
 
-static void RegisterCacheEvent(MagickCLCacheInfo info,cl_event event)
+static MagickBooleanType RegisterCacheEvent(MagickCLCacheInfo info,
+  cl_event event)
 {
   assert(info != (MagickCLCacheInfo) NULL);
   assert(event != (cl_event) NULL);
+  if (openCL_library->clRetainEvent(event) != CL_SUCCESS)
+    {
+      openCL_library->clWaitForEvents(1,&event);
+      return(MagickFalse);
+    }
   LockSemaphoreInfo(info->events_semaphore);
   if (info->events == (cl_event *) NULL)
     {
@@ -1636,7 +1658,7 @@ static void RegisterCacheEvent(MagickCLCacheInfo info,cl_event event)
     ThrowFatalException(ResourceLimitFatalError,"MemoryAllocationFailed");
   info->events[info->event_count-1]=event;
   UnlockSemaphoreInfo(info->events_semaphore);
-  openCL_library->clRetainEvent(event);
+  return(MagickTrue);
 }
 
 MagickPrivate MagickBooleanType EnqueueOpenCLKernel(cl_command_queue queue,
@@ -1695,9 +1717,11 @@ MagickPrivate MagickBooleanType EnqueueOpenCLKernel(cl_command_queue queue,
     openCL_library->clFlush(queue);
   if (RecordProfileData(input_info->opencl->device,kernel,event) == MagickFalse)
     {
-      RegisterCacheEvent(input_info->opencl,event);
-      if (output_info != (CacheInfo *) NULL)
-        RegisterCacheEvent(output_info->opencl,event);
+      if (RegisterCacheEvent(input_info->opencl,event) != MagickFalse)
+        {
+          if (output_info != (CacheInfo *) NULL)
+            (void) RegisterCacheEvent(output_info->opencl,event);
+        }
     }
   openCL_library->clReleaseEvent(event);
   return(MagickTrue);
@@ -2441,6 +2465,7 @@ static MagickBooleanType BindOpenCLFunctions()
 
   BIND(clCreateBuffer);
   BIND(clReleaseMemObject);
+  BIND(clRetainMemObject);
 
   BIND(clCreateContext);
   BIND(clReleaseContext);
@@ -2830,20 +2855,6 @@ MagickPrivate void ReleaseOpenCLDevice(MagickCLDevice device)
 %    o relinquish_pixels: the pixels will be relinquish when set to true.
 %
 */
-static void DestroyMagickCLCacheInfo(MagickCLCacheInfo info)
-{
-  ssize_t
-    i;
-
-  for (i=0; i < (ssize_t) info->event_count; i++)
-    openCL_library->clReleaseEvent(info->events[i]);
-  info->events=(cl_event *) RelinquishMagickMemory(info->events);
-  if (info->buffer != (cl_mem) NULL)
-    openCL_library->clReleaseMemObject(info->buffer);
-  RelinquishSemaphoreInfo(&info->events_semaphore);
-  ReleaseOpenCLDevice(info->device);
-  RelinquishMagickMemory(info);
-}
 
 static void CL_API_CALL DestroyMagickCLCacheInfoAndPixels(
   cl_event magick_unused(event),
@@ -2855,9 +2866,30 @@ static void CL_API_CALL DestroyMagickCLCacheInfoAndPixels(
   Quantum
     *pixels;
 
+  ssize_t
+    i;
+
   magick_unreferenced(event);
   magick_unreferenced(event_command_exec_status);
   info=(MagickCLCacheInfo) user_data;
+  for (i=(ssize_t)info->event_count-1; i >= 0; i--)
+  {
+    cl_int
+      event_status;
+  
+    cl_uint
+      status;
+
+    status=openCL_library->clGetEventInfo(info->events[i],
+      CL_EVENT_COMMAND_EXECUTION_STATUS,sizeof(event_status),&event_status, 
+      NULL);
+    if ((status == CL_SUCCESS) && (event_status != CL_COMPLETE))
+      {
+        openCL_library->clSetEventCallback(info->events[i],CL_COMPLETE,
+          &DestroyMagickCLCacheInfoAndPixels,info);
+        return;
+      }
+  }
   pixels=info->pixels;
   RelinquishMagickResource(MemoryResource,info->length);
   DestroyMagickCLCacheInfo(info);
@@ -2870,36 +2902,7 @@ MagickPrivate MagickCLCacheInfo RelinquishMagickCLCacheInfo(
   if (info == (MagickCLCacheInfo) NULL)
     return((MagickCLCacheInfo) NULL);
   if (relinquish_pixels != MagickFalse)
-    {
-      MagickBooleanType
-        events_completed;
-
-      ssize_t
-        i;
-
-      events_completed=MagickTrue;
-      for (i=0; i < (ssize_t)info->event_count; i++)
-      {
-        cl_int
-          event_status;
-
-        cl_uint
-          status;
-
-        status=openCL_library->clGetEventInfo(info->events[i],
-          CL_EVENT_COMMAND_EXECUTION_STATUS,sizeof(cl_int),&event_status,NULL);
-        if ((status == CL_SUCCESS) && (event_status != CL_COMPLETE))
-          {
-            events_completed=MagickFalse;
-            break;
-          }
-      }
-      if (events_completed == MagickFalse)
-        openCL_library->clSetEventCallback(info->events[info->event_count-1],
-          CL_COMPLETE,&DestroyMagickCLCacheInfoAndPixels,info);
-      else
-        DestroyMagickCLCacheInfoAndPixels((cl_event) NULL,0,info);
-    }
+    DestroyMagickCLCacheInfoAndPixels((cl_event) NULL,0,info);
   else
     DestroyMagickCLCacheInfo(info);
   return((MagickCLCacheInfo) NULL);

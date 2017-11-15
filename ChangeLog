@@ -1,3 +1,31 @@
+2017-11-11  7.0.7-11 Cristy  <quetzlzacatenango@image...>
+  * Release ImageMagick version 7.0.7-11, GIT revision 21635:0447c6b46:20171111.
+
+2017-11-05  7.0.7-10 Cristy  <quetzlzacatenango@image...>
+  * Release ImageMagick version 7.0.7-10, GIT revision 21612:36e2aabfd:20171105.
+
+2017-11-03  7.0.7-10 Dirk Lemstra <dirk@lem.....org>
+  * Fixed a problem with resource bookkeeping in AcquireMatrixInfo().
+
+2017-10-30  7.0.7-9 Cristy  <quetzlzacatenango@image...>
+  * Release ImageMagick version 7.0.7-9, GIT revision 21580:2682a311e:20171031.
+
+2017-10-20  7.0.7-9 Cristy  <quetzlzacatenango@image...>
+  * Encode JSON control characters (reference
+    https://github.com/ImageMagick/ImageMagick/issues/848).
+
+2017-10-27  7.0.7-9 Dirk Lemstra <dirk@lem.....org>
+  * Added support for reading mipmaps in dds images (reference
+    https://github.com/ImageMagick/ImageMagick/issues/845).
+
+2017-10-15  7.0.7-8 Cristy  <quetzlzacatenango@image...>
+  * Release ImageMagick version 7.0.7-8, GIT revision 21507:63ffc9878:20171015.
+
+2017-10-08  7.0.7-8 Cristy  <quetzlzacatenango@image...>
+  * Return expected results for a percent 0 -chop option argument (reference
+    https://www.imagemagick.org/discourse-server/viewtopic.php?f=3&t=32806).
+  * Tweaks to OpenMP support within ImageMagick.
+
 2017-10-07  7.0.7-7 Cristy  <quetzlzacatenango@image...>
   * Release ImageMagick version 7.0.7-7, GIT revision 21432:29003eeed:20171007.
 
@@ -9,9 +37,6 @@
   * Release ImageMagick version 7.0.7-6, GIT revision 21426:0a1cb507b:20171004.
 
 2017-10-03  7.0.7-6 Cristy  <quetzlzacatenango@image...>
-  * Reset the magick_list_initialized boolean when needed (reference
-    https://github.com/ImageMagick/ImageMagick/pull/826).
-2017-10-02  7.0.7-6 Cristy  <quetzlzacatenango@image...>
   * Reset the magick_list_initialized boolean when needed (reference
     https://github.com/ImageMagick/ImageMagick/pull/826).
 
